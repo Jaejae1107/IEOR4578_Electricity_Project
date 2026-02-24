@@ -131,8 +131,4 @@ No timestamp overlap exists between the three splits.
 - `master_long_hourly_validation_2014_01_04.csv` — shape `(445536, 3)`
 - `master_long_hourly_test_2014_05_12.csv` — shape `(913536, 3)`
 
-These files are intended for direct use in:
 
-1. **Level 1 (Pure Endogenous Baselines)**: use wide split files per client (or aggregate if desired).
-2. **Level 2 (Covariate Baselines)**: join each split with `calendar_features_hourly.csv` by `timestamp`.
-3. **Level 3 (Global Deep Learning)**: use long split files as primary training tables (join calendar features on `timestamp`).
