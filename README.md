@@ -103,3 +103,36 @@ git add .
 git commit -m "Finalize LD2011-2014 preprocessing repo (steps 1-3)"
 git push
 ```
+
+## 8) Time-Based Data Split (Train / Validation / Test)
+
+We additionally provide fixed chronological splits for model development:
+
+- **Train:** January 2012 – December 2013  
+- **Validation:** January 2014 – April 2014  
+- **Test:** May 2014 – December 2014  
+
+All split boundaries are inclusive at hourly resolution:
+- Train: `2012-01-01 00:00:00` to `2013-12-31 23:00:00`
+- Validation: `2014-01-01 00:00:00` to `2014-04-30 23:00:00`
+- Test: `2014-05-01 00:00:00` to `2014-12-31 23:00:00`
+
+No timestamp overlap exists between the three splits.
+
+### Wide-format split files
+
+- `master_wide_hourly_train_2012_2013.csv` — shape `(17448, 156)`
+- `master_wide_hourly_validation_2014_01_04.csv` — shape `(2856, 156)`
+- `master_wide_hourly_test_2014_05_12.csv` — shape `(5856, 156)`
+
+### Long-format split files
+
+- `master_long_hourly_train_2012_2013.csv` — shape `(2721888, 3)`
+- `master_long_hourly_validation_2014_01_04.csv` — shape `(445536, 3)`
+- `master_long_hourly_test_2014_05_12.csv` — shape `(913536, 3)`
+
+These files are intended for direct use in:
+
+1. **Level 1 (Pure Endogenous Baselines)**: use wide split files per client (or aggregate if desired).
+2. **Level 2 (Covariate Baselines)**: join each split with `calendar_features_hourly.csv` by `timestamp`.
+3. **Level 3 (Global Deep Learning)**: use long split files as primary training tables (join calendar features on `timestamp`).
