@@ -85,14 +85,14 @@ CSV exports:
 ## 6) CSV Usage by Model Level
 
 1. Level 1: Pure Endogenous Baselines (AutoARIMA, AutoETS)
-- Use: `master_wide_hourly.csv`
+- Use: `master_long_hourly.csv` (`unique_id`, `ds`, `y` format expected by statsforecast)
 - Optional: `aggregate_hourly.csv` for single-series benchmark
 
 2. Level 2: Covariate Baselines (SARIMAX, Prophet)
-- Use: `master_wide_hourly.csv` + `calendar_features_hourly.csv`
+- Use: `master_long_hourly.csv` + `calendar_features_hourly.csv` (join on `timestamp`)
 
-3. Level 3: Global Deep Learning
-- Use: `master_long_hourly.csv`
+3. Level 3: Global Deep Learning (e.g. iTransformer)
+- Use: `master_wide_hourly.csv` (each client column is a variate for multivariate models)
 - Join: `calendar_features_hourly.csv` on `timestamp`
 - Optional indexing helper: `active_clients.csv`
 
