@@ -96,7 +96,68 @@ CSV exports:
 - Join: `calendar_features_hourly.csv` on `timestamp`
 - Optional indexing helper: `active_clients.csv`
 
-## 7) GitHub Upload
+## 7) Modeling Step 2 (`src/modeling_step2/`)
+
+Three forecasting models are implemented for **24-hour-ahead** electricity load forecasting across 156 active clients.
+
+### Data Splits Used
+
+| Split | Period | Wide Shape | Long Shape |
+|-------|--------|-----------|-----------|
+| Train | 2012-01-01 – 2013-12-31 | (17448, 156) | (2721888, 3) |
+| Validation | 2014-01-01 – 2014-04-30 | (2856, 156) | (445536, 3) |
+| Test | 2014-05-01 – 2014-12-31 | (5856, 156) | (913536, 3) |
+
+### Models
+
+#### SARIMAX.ipynb — AutoARIMA (Level 2)
+
+- Library: `statsforecast` `AutoARIMA`
+- Format: long-format (`master_long_hourly_*.csv`)
+- Training window: last 672 hours (4-week lookback) per client
+- Exogenous features: `hour_sin/cos`, `dow_sin/cos`, `is_weekend`, `month_sin/cos`
+- Season length: 24 (daily); stepwise + approximation enabled for speed
+- Parallel training: `n_jobs=-1`
+- Saved models: `sarimax_val.joblib`, `sarimax_final.joblib`
+
+**Test results (156 clients, overall):** MSE = 267,842 | MAE = 134.84 | WAPE = 0.197
+
+#### Prophet.ipynb — Prophet (Level 2)
+
+- Library: `prophet`
+- Format: long-format (`master_long_hourly_*.csv`)
+- One independent model per client (156 models total)
+- Seasonalities: daily, weekly, yearly (additive mode)
+- Exogenous regressor: `is_weekend`
+- Saved models: `prophet_val.joblib`, `prophet_final.joblib`
+
+**Test results (156 clients, overall):** MSE = 256,237 | MAE = 113.45 | WAPE = 0.166
+
+#### iTransformer.ipynb — iTransformer (Level 3)
+
+- Library: `neuralforecast` `iTransformer`
+- Format: wide-format (`master_wide_hourly_*.csv`) converted to long format for NeuralForecast
+- Global model shared across all 156 clients
+- Horizon: 24 h | Input size: 672 h (4-week lookback)
+- Architecture: hidden=512, heads=8, encoder layers=2, decoder layers=1, dropout=0.1
+- Loss: MSE (train) / MAE (validation); early stopping patience=10 steps
+- Exogenous features: `hour_sin/cos`, `dow_sin/cos`, `is_weekend`, `month_sin/cos`
+- ~8.1M trainable parameters
+- Saved models: `itransformer_val/`, `itransformer_final/`
+
+**Test results (156 clients, overall):** MSE = 177,343 | MAE = 100.96 | WAPE = 0.143
+
+### Model Comparison (Test Set)
+
+| Model | Test MSE | Test MAE | Test WAPE |
+|-------|----------|----------|-----------|
+| iTransformer | **177,343** | **100.96** | **0.143** |
+| Prophet | 256,237 | 113.45 | 0.166 |
+| AutoARIMA | 267,842 | 134.84 | 0.197 |
+
+iTransformer achieves the best overall performance. All models show high per-client variance; outlier clients (e.g., MT_196, MT_279, MT_235) produce significantly elevated errors.
+
+## 8) GitHub Upload
 
 ```bash
 git add .
