@@ -186,21 +186,9 @@ iTransformer achieves the best overall performance. All models show high per-cli
 
 ## 10) Modeling Step 1 (`src/modeling_step1/`)
 
-Two forecasting models are implemented for **24-hour-ahead** electricity load forecasting across 156 active clients.
+Three forecasting models are implemented for **24-hour-ahead** electricity load forecasting across 156 active clients, with an additional aggregate single-series benchmark.
 
 ### Models
-
-#### AutoARIMA.ipynb — AutoARIMA (Level 1)
-
-- Library: `statsforecast` `AutoARIMA`
-- Format: long-format (`master_long_hourly_*.csv`)
-- Training window: last 672 hours (4-week lookback) per client
-- Exogenous features: None
-- Season length: 24 (daily); stepwise + approximation enabled for speed
-- Parallel training: `n_jobs=-1`
-- Saved models: `autoarima_val.joblib`, `autoarima_final.joblib`
-
-**Test results (156 clients, overall):** MSE = 155,072 | MAE = 99.11 | WAPE = 0.145
 
 #### AutoETS.ipynb — AutoETS (Level 1)
 
@@ -214,11 +202,35 @@ Two forecasting models are implemented for **24-hour-ahead** electricity load fo
 
 **Test results (156 clients, overall):** MSE = 612,003 | MAE = 145.52 | WAPE = 0.213
 
+#### AutoARIMA.ipynb — AutoARIMA (Level 1)
+
+- Library: `statsforecast` `AutoARIMA`
+- Format: single time series (`master_long_hourly_*.csv`)
+- Training window: last 672 hours (4-week lookback) per client
+- Exogenous features: None
+- Season length: 24 (daily); stepwise + approximation enabled for speed
+- Parallel training: `n_jobs=-1`
+- Saved models: `autoarima_val.joblib`, `autoarima_final.joblib`
+
+**Test results (156 clients, overall):** MSE = 155,072 | MAE = 99.11 | WAPE = 0.145
+
+#### AutoARIMA_Aggregate.ipynb — AutoARIMA (Level 1)
+
+- Library: `statsforecast` `AutoARIMA`
+- Format: long-format (`aggregate_hourly.csv`)
+- Training window: last 672 hours (4-week lookback)
+- Exogenous features: None
+- Season length: 24 (daily); stepwise + approximation enabled for speed
+- Saved models: `autoarima_agg_val.joblib`, `autoarima_agg_final.joblib`
+
+**Test results (aggregate series):** MSE = 203,562,485 | MAE = 10,726.18 | WAPE = 0.100
+
 ### Model Comparison (Test Set)
 
 | Model | Test MSE | Test MAE | Test WAPE |
 |-------|----------|----------|-----------|
-| AutoARIMA | 155,072 | 99.11 | 0.145 |
 | AutoETS | 612,003 | 145.52 | 0.213 |
+| AutoARIMA | 155,072 | 99.11 | 0.145 |
+| AutoARIMA(agg) | 203,562,485 | 10,726.18 | 0.100 |
 
-AutoARIMA unexpectedly outperformed both SARIMAX (WAPE 0.197) and AutoETS (WAPE 0.213); AutoETS likely anchored on the late December 2013 consumption peak, causing persistent overestimation early in the validation period.
+AutoARIMA outperformed AutoETS (WAPE 0.213); AutoETS likely anchored on the late December 2013 consumption peak, causing persistent overestimation early in the validation period. Aggregate benchmark (WAPE 0.1004) showed lower error than per-client (WAPE 0.1448)
