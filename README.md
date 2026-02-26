@@ -183,3 +183,42 @@ Three forecasting models are implemented for **24-hour-ahead** electricity load 
 | AutoARIMA | 267,842 | 134.84 | 0.197 |
 
 iTransformer achieves the best overall performance. All models show high per-client variance; outlier clients (e.g., MT_196, MT_279, MT_235) produce significantly elevated errors.
+
+## 10) Modeling Step 1 (`src/modeling_step1/`)
+
+Two forecasting models are implemented for **24-hour-ahead** electricity load forecasting across 156 active clients.
+
+### Models
+
+#### AutoARIMA.ipynb — AutoARIMA (Level 1)
+
+- Library: `statsforecast` `AutoARIMA`
+- Format: long-format (`master_long_hourly_*.csv`)
+- Training window: last 672 hours (4-week lookback) per client
+- Exogenous features: None
+- Season length: 24 (daily); stepwise + approximation enabled for speed
+- Parallel training: `n_jobs=-1`
+- Saved models: `autoarima_val.joblib`, `autoarima_final.joblib`
+
+**Test results (156 clients, overall):** MSE = 155,072 | MAE = 99.11 | WAPE = 0.145
+
+#### AutoETS.ipynb — AutoETS (Level 1)
+
+- Library: `statsforecast`
+- Format: long-format (`master_long_hourly_*.csv`)
+- Training window: last 672 hours (4-week lookback) per client
+- Exogenous features: None
+- Season length: 24 (daily); automatically selects error, trend, seasonality components
+- Parallel training: `n_jobs=-1`
+- Saved models: `autoets_val.joblib`, `autoets_final.joblib`
+
+**Test results (156 clients, overall):** MSE = 612,003 | MAE = 145.52 | WAPE = 0.213
+
+### Model Comparison (Test Set)
+
+| Model | Test MSE | Test MAE | Test WAPE |
+|-------|----------|----------|-----------|
+| AutoARIMA | 155,072 | 99.11 | 0.145 |
+| AutoETS | 612,003 | 145.52 | 0.213 |
+
+AutoARIMA unexpectedly outperformed both SARIMAX (WAPE 0.197) and AutoETS (WAPE 0.213); AutoETS likely anchored on the late December 2013 consumption peak, causing persistent overestimation early in the validation period.
