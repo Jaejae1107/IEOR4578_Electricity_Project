@@ -131,60 +131,7 @@ No timestamp overlap exists between the three splits.
 - `master_long_hourly_validation_2014_01_04.csv` — shape `(445536, 3)`
 - `master_long_hourly_test_2014_05_12.csv` — shape `(913536, 3)`
 
-## 9) Modeling Step 2 (`src/modeling_step2/`)
-
-Three forecasting models are implemented for **24-hour-ahead** electricity load forecasting across 156 active clients.
-
-### Models
-
-#### SARIMAX.ipynb — AutoARIMA (Level 2)
-
-- Library: `statsforecast` `AutoARIMA`
-- Format: long-format (`master_long_hourly_*.csv`)
-- Training window: last 672 hours (4-week lookback) per client
-- Exogenous features: `hour_sin/cos`, `dow_sin/cos`, `is_weekend`, `month_sin/cos`
-- Season length: 24 (daily); stepwise + approximation enabled for speed
-- Parallel training: `n_jobs=-1`
-- Saved models: `sarimax_val.joblib`, `sarimax_final.joblib`
-
-**Test results (156 clients, overall):** MSE = 267,842 | MAE = 134.84 | WAPE = 0.197
-
-#### Prophet.ipynb — Prophet (Level 2)
-
-- Library: `prophet`
-- Format: long-format (`master_long_hourly_*.csv`)
-- One independent model per client (156 models total)
-- Seasonalities: daily, weekly, yearly (additive mode)
-- Exogenous regressor: `is_weekend`
-- Saved models: `prophet_val.joblib`, `prophet_final.joblib`
-
-**Test results (156 clients, overall):** MSE = 256,237 | MAE = 113.45 | WAPE = 0.166
-
-#### iTransformer.ipynb — iTransformer (Level 3)
-
-- Library: `neuralforecast` `iTransformer`
-- Format: wide-format (`master_wide_hourly_*.csv`) converted to long format for NeuralForecast
-- Global model shared across all 156 clients
-- Horizon: 24 h | Input size: 672 h (4-week lookback)
-- Architecture: hidden=512, heads=8, encoder layers=2, decoder layers=1, dropout=0.1
-- Loss: MSE (train) / MAE (validation); early stopping patience=10 steps
-- Exogenous features: `hour_sin/cos`, `dow_sin/cos`, `is_weekend`, `month_sin/cos`
-- ~8.1M trainable parameters
-- Saved models: `itransformer_val/`, `itransformer_final/`
-
-**Test results (156 clients, overall):** MSE = 177,343 | MAE = 100.96 | WAPE = 0.143
-
-### Model Comparison (Test Set)
-
-| Model | Test MSE | Test MAE | Test WAPE |
-|-------|----------|----------|-----------|
-| iTransformer | **177,343** | **100.96** | **0.143** |
-| Prophet | 256,237 | 113.45 | 0.166 |
-| AutoARIMA | 267,842 | 134.84 | 0.197 |
-
-iTransformer achieves the best overall performance. All models show high per-client variance; outlier clients (e.g., MT_196, MT_279, MT_235) produce significantly elevated errors.
-
-## 10) Modeling Step 1 (`src/modeling_step1/`)
+## 9) Modeling Step 1 (`src/modeling_step1/`)
 
 Three forecasting models are implemented for **24-hour-ahead** electricity load forecasting across 156 active clients, with an additional aggregate single-series benchmark.
 
@@ -234,3 +181,69 @@ Three forecasting models are implemented for **24-hour-ahead** electricity load 
 | AutoARIMA(agg) | 203,562,485 | 10,726.18 | 0.100 |
 
 AutoARIMA outperformed AutoETS (WAPE 0.213); AutoETS likely anchored on the late December 2013 consumption peak, causing persistent overestimation early in the validation period. Aggregate benchmark (WAPE 0.1004) showed lower error than per-client (WAPE 0.1448)
+
+## 10) Modeling Step 2 (`src/modeling_step2/`)
+
+Two covariate forecasting models are implemented for **24-hour-ahead** electricity load forecasting across 156 active clients.
+
+### Models
+
+#### SARIMAX.ipynb — AutoARIMA (Level 2)
+
+- Library: `statsforecast` `AutoARIMA`
+- Format: long-format (`master_long_hourly_*.csv`)
+- Training window: last 672 hours (4-week lookback) per client
+- Exogenous features: `hour_sin/cos`, `dow_sin/cos`, `is_weekend`, `month_sin/cos`
+- Season length: 24 (daily); stepwise + approximation enabled for speed
+- Parallel training: `n_jobs=-1`
+- Saved models: `sarimax_val.joblib`, `sarimax_final.joblib`
+
+**Test results (156 clients, overall):** MSE = 267,842 | MAE = 134.84 | WAPE = 0.197
+
+#### Prophet.ipynb — Prophet (Level 2)
+
+- Library: `prophet`
+- Format: long-format (`master_long_hourly_*.csv`)
+- One independent model per client (156 models total)
+- Seasonalities: daily, weekly, yearly (additive mode)
+- Exogenous regressor: `is_weekend`
+- Saved models: `prophet_val.joblib`, `prophet_final.joblib`
+
+**Test results (156 clients, overall):** MSE = 256,237 | MAE = 113.45 | WAPE = 0.166
+
+### Model Comparison (Test Set)
+
+| Model | Test MSE | Test MAE | Test WAPE |
+|-------|----------|----------|-----------|
+| Prophet | **256,237** | **113.45** | **0.166** |
+| AutoARIMA | 267,842 | 134.84 | 0.197 |
+
+Prophet outperforms AutoARIMA on all metrics at the covariate level.
+
+## 11) Modeling Step 3 (`src/modeling_step3/`)
+
+A global deep learning model is implemented for **24-hour-ahead** electricity load forecasting across all 156 active clients simultaneously.
+
+### Models
+
+#### iTransformer.ipynb — iTransformer (Level 3)
+
+- Library: `neuralforecast` `iTransformer`
+- Format: wide-format (`master_wide_hourly_*.csv`) converted to long format for NeuralForecast
+- Global model shared across all 156 clients
+- Horizon: 24 h | Input size: 672 h (4-week lookback)
+- Architecture: hidden=512, heads=8, encoder layers=2, decoder layers=1, d_ff=2048, dropout=0.1
+- Loss: MSE (train) / MAE (validation); early stopping patience=10 steps
+- Exogenous features: `hour_sin/cos`, `dow_sin/cos`, `is_weekend`, `month_sin/cos`
+- ~8.1M trainable parameters
+- Saved models: `itransformer_val/`, `itransformer_final/`
+
+**Test results (156 clients, overall):** MSE = 177,343 | MAE = 100.96 | WAPE = 0.143
+
+### Model Comparison (Test Set)
+
+| Model | Test MSE | Test MAE | Test WAPE |
+|-------|----------|----------|-----------|
+| iTransformer | **177,343** | **100.96** | **0.143** |
+
+iTransformer achieves the best overall performance across all modeling steps. All models show high per-client variance; outlier clients (e.g., MT_196, MT_279, MT_235) produce significantly elevated errors.
