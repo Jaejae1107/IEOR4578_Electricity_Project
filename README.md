@@ -264,3 +264,14 @@ A global deep learning model is implemented for **720-hour-ahead** (rolling chun
 | 3 | iTransformer | 228,639 | 119.89 | 0.175 |
 
 Per-client AutoARIMA (Level 1) achieves the best WAPE (0.145) among all per-client models, followed by Prophet (Level 2, 0.166) and iTransformer (Level 3, 0.175). iTransformer outperforms SARIMAX and AutoETS but underperforms both AutoARIMA and Prophet. All models show high per-client variance; outlier clients (e.g., MT_196, MT_279, MT_208) with large absolute loads produce significantly elevated errors.
+
+## 13) Interactive Dashboard (`dashboard/`)
+
+A Streamlit dashboard for interactively comparing model predictions against actual values. Users can select any combination of the 5 models, browse all 156 clients, and filter by date range. Displays per-client and overall metrics (MSE, MAE, WAPE) alongside an interactive Plotly line chart.
+
+```bash
+source .venv/bin/activate
+streamlit run dashboard/dashboard.py
+```
+
+See [dashboard/README.md](dashboard/README.md) for setup and usage details.
