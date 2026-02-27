@@ -222,7 +222,7 @@ Prophet outperforms AutoARIMA on all metrics at the covariate level.
 
 ## 11) Modeling Step 3 (`src/modeling_step3/`)
 
-A global deep learning model is implemented for **24-hour-ahead** electricity load forecasting across all 156 active clients simultaneously.
+A global deep learning model is implemented for **720-hour-ahead** (rolling chunk) electricity load forecasting across all 156 active clients simultaneously.
 
 ### Models
 
@@ -231,19 +231,36 @@ A global deep learning model is implemented for **24-hour-ahead** electricity lo
 - Library: `neuralforecast` `iTransformer`
 - Format: wide-format (`master_wide_hourly_*.csv`) converted to long format for NeuralForecast
 - Global model shared across all 156 clients
-- Horizon: 24 h | Input size: 672 h (4-week lookback)
+- Chunk horizon: 720 h (~1 month) | Input size: 672 h (4-week lookback)
+- Rolling prediction: each chunk's predictions are appended as history before the next chunk
 - Architecture: hidden=512, heads=8, encoder layers=2, decoder layers=1, d_ff=2048, dropout=0.1
-- Loss: MSE (train) / MAE (validation); early stopping patience=10 steps
+- Loss: MSE (train) / MAE (validation); early stopping patience=10 steps, val check every 100 steps
 - Exogenous features: `hour_sin/cos`, `dow_sin/cos`, `is_weekend`, `month_sin/cos`
-- ~8.1M trainable parameters
-- Saved models: `itransformer_val/`, `itransformer_final/`
+- Scaler: standard (per-series normalization)
+- ~7.0M trainable parameters
+- Saved model: `itransformer_val/`
 
-**Test results (156 clients, overall):** MSE = 177,343 | MAE = 100.96 | WAPE = 0.143
+**Train results (in-sample proxy, 156 clients, overall):** MSE = 145,888 | MAE = 80.49 | WAPE = 0.110
+
+**Validation results (156 clients, overall):** MSE = 60,358 | MAE = 68.94 | WAPE = 0.112
+
+**Test results (156 clients, overall):** MSE = 228,639 | MAE = 119.89 | WAPE = 0.175
 
 ### Model Comparison (Test Set)
 
 | Model | Test MSE | Test MAE | Test WAPE |
 |-------|----------|----------|-----------|
-| iTransformer | **177,343** | **100.96** | **0.143** |
+| iTransformer | 228,639 | 119.89 | 0.175 |
 
-iTransformer achieves the best overall performance across all modeling steps. All models show high per-client variance; outlier clients (e.g., MT_196, MT_279, MT_235) produce significantly elevated errors.
+## 12) Overall Model Comparison (Test Set)
+
+| Level | Model | Test MSE | Test MAE | Test WAPE |
+|-------|-------|----------|----------|-----------|
+| 1 | AutoETS | 612,003 | 145.52 | 0.213 |
+| 1 | AutoARIMA | 155,072 | 99.11 | **0.145** |
+| 1 | AutoARIMA (agg) | 203,562,485 | 10,726.18 | 0.100 |
+| 2 | SARIMAX | 267,842 | 134.84 | 0.197 |
+| 2 | Prophet | 256,237 | 113.45 | 0.166 |
+| 3 | iTransformer | 228,639 | 119.89 | 0.175 |
+
+Per-client AutoARIMA (Level 1) achieves the best WAPE (0.145) among all per-client models, followed by Prophet (Level 2, 0.166) and iTransformer (Level 3, 0.175). iTransformer outperforms SARIMAX and AutoETS but underperforms both AutoARIMA and Prophet. All models show high per-client variance; outlier clients (e.g., MT_196, MT_279, MT_208) with large absolute loads produce significantly elevated errors.
