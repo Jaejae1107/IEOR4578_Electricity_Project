@@ -131,9 +131,60 @@ No timestamp overlap exists between the three splits.
 - `master_long_hourly_validation_2014_01_04.csv` — shape `(445536, 3)`
 - `master_long_hourly_test_2014_05_12.csv` — shape `(913536, 3)`
 
-## 9) Modeling Step 2 (`src/modeling_step2/`)
+## 9) Modeling Step 1 (`src/modeling_step1/`)
 
-Three forecasting models are implemented for **24-hour-ahead** electricity load forecasting across 156 active clients.
+Three forecasting models are implemented for **24-hour-ahead** electricity load forecasting across 156 active clients, with an additional aggregate single-series benchmark.
+
+### Models
+
+#### AutoETS.ipynb — AutoETS (Level 1)
+
+- Library: `statsforecast`
+- Format: long-format (`master_long_hourly_*.csv`)
+- Training window: last 672 hours (4-week lookback) per client
+- Exogenous features: None
+- Season length: 24 (daily); automatically selects error, trend, seasonality components
+- Parallel training: `n_jobs=-1`
+- Saved models: `autoets_val.joblib`, `autoets_final.joblib`
+
+**Test results (156 clients, overall):** MSE = 612,003 | MAE = 145.52 | WAPE = 0.213
+
+#### AutoARIMA.ipynb — AutoARIMA (Level 1)
+
+- Library: `statsforecast` `AutoARIMA`
+- Format: single time series (`master_long_hourly_*.csv`)
+- Training window: last 672 hours (4-week lookback) per client
+- Exogenous features: None
+- Season length: 24 (daily); stepwise + approximation enabled for speed
+- Parallel training: `n_jobs=-1`
+- Saved models: `autoarima_val.joblib`, `autoarima_final.joblib`
+
+**Test results (156 clients, overall):** MSE = 155,072 | MAE = 99.11 | WAPE = 0.145
+
+#### AutoARIMA_Aggregate.ipynb — AutoARIMA (Level 1)
+
+- Library: `statsforecast` `AutoARIMA`
+- Format: long-format (`aggregate_hourly.csv`)
+- Training window: last 672 hours (4-week lookback)
+- Exogenous features: None
+- Season length: 24 (daily); stepwise + approximation enabled for speed
+- Saved models: `autoarima_agg_val.joblib`, `autoarima_agg_final.joblib`
+
+**Test results (aggregate series):** MSE = 203,562,485 | MAE = 10,726.18 | WAPE = 0.100
+
+### Model Comparison (Test Set)
+
+| Model | Test MSE | Test MAE | Test WAPE |
+|-------|----------|----------|-----------|
+| AutoETS | 612,003 | 145.52 | 0.213 |
+| AutoARIMA | 155,072 | 99.11 | 0.145 |
+| AutoARIMA(agg) | 203,562,485 | 10,726.18 | 0.100 |
+
+AutoARIMA outperformed AutoETS (WAPE 0.213); AutoETS likely anchored on the late December 2013 consumption peak, causing persistent overestimation early in the validation period. Aggregate benchmark (WAPE 0.1004) showed lower error than per-client (WAPE 0.1448)
+
+## 10) Modeling Step 2 (`src/modeling_step2/`)
+
+Two covariate forecasting models are implemented for **24-hour-ahead** electricity load forecasting across 156 active clients.
 
 ### Models
 
@@ -160,26 +211,67 @@ Three forecasting models are implemented for **24-hour-ahead** electricity load 
 
 **Test results (156 clients, overall):** MSE = 256,237 | MAE = 113.45 | WAPE = 0.166
 
+### Model Comparison (Test Set)
+
+| Model | Test MSE | Test MAE | Test WAPE |
+|-------|----------|----------|-----------|
+| Prophet | **256,237** | **113.45** | **0.166** |
+| AutoARIMA | 267,842 | 134.84 | 0.197 |
+
+Prophet outperforms AutoARIMA on all metrics at the covariate level.
+
+## 11) Modeling Step 3 (`src/modeling_step3/`)
+
+A global deep learning model is implemented for **720-hour-ahead** (rolling chunk) electricity load forecasting across all 156 active clients simultaneously.
+
+### Models
+
 #### iTransformer.ipynb — iTransformer (Level 3)
 
 - Library: `neuralforecast` `iTransformer`
 - Format: wide-format (`master_wide_hourly_*.csv`) converted to long format for NeuralForecast
 - Global model shared across all 156 clients
-- Horizon: 24 h | Input size: 672 h (4-week lookback)
-- Architecture: hidden=512, heads=8, encoder layers=2, decoder layers=1, dropout=0.1
-- Loss: MSE (train) / MAE (validation); early stopping patience=10 steps
+- Chunk horizon: 720 h (~1 month) | Input size: 672 h (4-week lookback)
+- Rolling prediction: each chunk's predictions are appended as history before the next chunk
+- Architecture: hidden=512, heads=8, encoder layers=2, decoder layers=1, d_ff=2048, dropout=0.1
+- Loss: MSE (train) / MAE (validation); early stopping patience=10 steps, val check every 100 steps
 - Exogenous features: `hour_sin/cos`, `dow_sin/cos`, `is_weekend`, `month_sin/cos`
-- ~8.1M trainable parameters
-- Saved models: `itransformer_val/`, `itransformer_final/`
+- Scaler: standard (per-series normalization)
+- ~7.0M trainable parameters
+- Saved model: `itransformer_val/`
 
-**Test results (156 clients, overall):** MSE = 177,343 | MAE = 100.96 | WAPE = 0.143
+**Train results (in-sample proxy, 156 clients, overall):** MSE = 145,888 | MAE = 80.49 | WAPE = 0.110
+
+**Validation results (156 clients, overall):** MSE = 60,358 | MAE = 68.94 | WAPE = 0.112
+
+**Test results (156 clients, overall):** MSE = 228,639 | MAE = 119.89 | WAPE = 0.175
 
 ### Model Comparison (Test Set)
 
 | Model | Test MSE | Test MAE | Test WAPE |
 |-------|----------|----------|-----------|
-| iTransformer | **177,343** | **100.96** | **0.143** |
-| Prophet | 256,237 | 113.45 | 0.166 |
-| AutoARIMA | 267,842 | 134.84 | 0.197 |
+| iTransformer | 228,639 | 119.89 | 0.175 |
 
-iTransformer achieves the best overall performance. All models show high per-client variance; outlier clients (e.g., MT_196, MT_279, MT_235) produce significantly elevated errors.
+## 12) Overall Model Comparison (Test Set)
+
+| Level | Model | Test MSE | Test MAE | Test WAPE |
+|-------|-------|----------|----------|-----------|
+| 1 | AutoETS | 612,003 | 145.52 | 0.213 |
+| 1 | AutoARIMA | 155,072 | 99.11 | **0.145** |
+| 1 | AutoARIMA (agg) | 203,562,485 | 10,726.18 | 0.100 |
+| 2 | SARIMAX | 267,842 | 134.84 | 0.197 |
+| 2 | Prophet | 256,237 | 113.45 | 0.166 |
+| 3 | iTransformer | 228,639 | 119.89 | 0.175 |
+
+Per-client AutoARIMA (Level 1) achieves the best WAPE (0.145) among all per-client models, followed by Prophet (Level 2, 0.166) and iTransformer (Level 3, 0.175). iTransformer outperforms SARIMAX and AutoETS but underperforms both AutoARIMA and Prophet. All models show high per-client variance; outlier clients (e.g., MT_196, MT_279, MT_208) with large absolute loads produce significantly elevated errors.
+
+## 13) Interactive Dashboard (`dashboard/`)
+
+A Streamlit dashboard for interactively comparing model predictions against actual values. Users can select any combination of the 5 models, browse all 156 clients, and filter by date range. Displays per-client and overall metrics (MSE, MAE, WAPE) alongside an interactive Plotly line chart.
+
+```bash
+source .venv/bin/activate
+streamlit run dashboard/dashboard.py
+```
+
+See [dashboard/README.md](dashboard/README.md) for setup and usage details.
