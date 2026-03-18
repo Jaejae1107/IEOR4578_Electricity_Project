@@ -63,6 +63,7 @@ def main() -> None:
     print(f"Selected number of clusters: {result['best_k']}")
     print(f"Output directory: {result['output_dir']}")
     print(f"Figure index: {os.path.join(args.output_dir, 'figures', 'index.html')}")
+    print(f"k=2 vs k=3 comparison: {os.path.join(args.output_dir, 'cluster_k_comparison.csv')}")
     for period in result["test_periods"]:
         print(
             f"Period {period['period_id']}: {period['start']} -> {period['end']} "

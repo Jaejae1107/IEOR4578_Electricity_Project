@@ -188,12 +188,9 @@ def write_cluster_pca_svg(
     feature_table: pd.DataFrame,
     mapping_df: pd.DataFrame,
     output_path: str | Path,
+    title: str = "Cluster Separation (PCA Projection)",
+    include_outliers: bool = True,
 ) -> None:
-    width, height = SVG_WIDTH, SVG_HEIGHT
-    left, right, top, bottom = 90, 90, 80, 80
-    plot_w = width - left - right
-    plot_h = height - top - bottom
-
     used_columns = _feature_columns(feature_table)
     X = feature_table[used_columns].fillna(0.0).to_numpy()
     X_scaled = RobustScaler().fit_transform(X)
@@ -207,13 +204,18 @@ def write_cluster_pca_svg(
         on="user_id",
         how="left",
     )
+    if not include_outliers:
+        scatter_df = scatter_df.loc[~scatter_df["is_outlier"]].copy()
+
+    width, height = SVG_WIDTH, SVG_HEIGHT
+    left, right, top, bottom = 90, 90, 80, 80
 
     x_min = float(scatter_df["pc1"].min())
     x_max = float(scatter_df["pc1"].max())
     y_min = float(scatter_df["pc2"].min())
     y_max = float(scatter_df["pc2"].max())
 
-    svg = _svg_header("Cluster Separation (PCA Projection)")
+    svg = _svg_header(title)
     svg.append(f'<line x1="{left}" y1="{height-bottom}" x2="{width-right}" y2="{height-bottom}" stroke="#222" stroke-width="2"/>')
     svg.append(f'<line x1="{left}" y1="{top}" x2="{left}" y2="{height-bottom}" stroke="#222" stroke-width="2"/>')
 
@@ -221,8 +223,8 @@ def write_cluster_pca_svg(
         x = _scale(float(row["pc1"]), x_min, x_max, left, width - right)
         y = _scale(float(row["pc2"]), y_min, y_max, height - bottom, top)
         color = _cluster_color(int(row["cluster_id"]))
-        radius = 6 if bool(row["is_outlier"]) else 4
-        opacity = 0.95 if bool(row["is_outlier"]) else 0.65
+        radius = 6 if include_outliers and bool(row["is_outlier"]) else 4
+        opacity = 0.95 if include_outliers and bool(row["is_outlier"]) else 0.65
         svg.append(
             f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{radius}" fill="{color}" opacity="{opacity}" />'
         )
@@ -285,6 +287,10 @@ def write_index_html(summary_df: pd.DataFrame, output_dir: str | Path) -> None:
   <h2>PCA Scatter</h2>
   <img src="cluster_pca_scatter.svg" alt="Cluster PCA scatter plot" />
 
+  <h2>Regular-Only PCA Scatter</h2>
+  <p>This version removes the outlier users so the separation between the main clusters is easier to inspect.</p>
+  <img src="cluster_pca_regular_only.svg" alt="Regular-only cluster PCA scatter plot" />
+
   <h2>Cluster Summary Table</h2>
   <table>
     <thead>
@@ -294,6 +300,14 @@ def write_index_html(summary_df: pd.DataFrame, output_dir: str | Path) -> None:
       {"".join(summary_rows)}
     </tbody>
   </table>
+
+  <h2>Supporting Files</h2>
+  <ul>
+    <li><a href="../cluster_summary.csv">cluster_summary.csv</a></li>
+    <li><a href="../user_cluster_mapping.csv">user_cluster_mapping.csv</a></li>
+    <li><a href="../cluster_model_selection.csv">cluster_model_selection.csv</a></li>
+    <li><a href="../cluster_k_comparison.csv">cluster_k_comparison.csv</a></li>
+  </ul>
 </body>
 </html>
 """
@@ -317,4 +331,11 @@ def generate_clustering_visualizations(
     write_cluster_size_svg(summary_df, output_path / "cluster_size_bar.svg")
     write_cluster_daily_profile_svg(feature_table, mapping_df, output_path / "cluster_daily_profile.svg")
     write_cluster_pca_svg(feature_table, mapping_df, output_path / "cluster_pca_scatter.svg")
+    write_cluster_pca_svg(
+        feature_table,
+        mapping_df,
+        output_path / "cluster_pca_regular_only.svg",
+        title="Cluster Separation (PCA Projection, Regular Users Only)",
+        include_outliers=False,
+    )
     write_index_html(summary_df, output_path)

@@ -46,6 +46,50 @@ def _outlier_columns(feature_table: pd.DataFrame) -> list[str]:
     return _feature_columns(feature_table) + BASE_CLUSTER_FEATURES
 
 
+def _scaled_feature_matrix(feature_table: pd.DataFrame) -> np.ndarray:
+    used_columns = _feature_columns(feature_table)
+    X = feature_table[used_columns].fillna(0.0).to_numpy()
+    scaler = RobustScaler()
+    return scaler.fit_transform(X)
+
+
+def _fit_cluster_labels(
+    feature_table: pd.DataFrame,
+    n_clusters: int,
+    random_state: int = 42,
+) -> np.ndarray:
+    X_scaled = _scaled_feature_matrix(feature_table)
+    model = KMeans(n_clusters=n_clusters, random_state=random_state, n_init=20)
+    return model.fit_predict(X_scaled)
+
+
+def _build_mapping_df(
+    feature_table: pd.DataFrame,
+    outlier_flags: pd.Series,
+    regular_labels: np.ndarray,
+) -> pd.DataFrame:
+    regular_features = feature_table.loc[~outlier_flags]
+    mapping_regular = pd.DataFrame(
+        {
+            "user_id": regular_features.index,
+            "cluster_id": regular_labels.astype(int),
+            "is_outlier": False,
+        }
+    )
+    mapping_outliers = pd.DataFrame(
+        {
+            "user_id": feature_table.index[outlier_flags],
+            "cluster_id": -1,
+            "is_outlier": True,
+        }
+    )
+    mapping_df = pd.concat([mapping_regular, mapping_outliers], ignore_index=True).sort_values(
+        ["cluster_id", "user_id"]
+    )
+    mapping_df.reset_index(drop=True, inplace=True)
+    return mapping_df
+
+
 def _cluster_name(row: pd.Series, load_quantiles: Tuple[float, float]) -> str:
     if row["cluster_id"] == -1:
         return "outlier_irregular_profile"
@@ -81,10 +125,7 @@ def select_cluster_count(
     min_cluster_size: int = 5,
     random_state: int = 42,
 ) -> Tuple[int, pd.DataFrame, np.ndarray]:
-    used_columns = _feature_columns(feature_table)
-    X = feature_table[used_columns].fillna(0.0).to_numpy()
-    scaler = RobustScaler()
-    X_scaled = scaler.fit_transform(X)
+    X_scaled = _scaled_feature_matrix(feature_table)
 
     selection_rows = []
     best_k = None
@@ -139,6 +180,87 @@ def detect_outliers(
     detector = IsolationForest(contamination=contamination, random_state=random_state)
     labels = detector.fit_predict(X_scaled)
     return pd.Series(labels == -1, index=feature_table.index, name="is_outlier")
+
+
+def build_cluster_choice_comparison(
+    feature_table: pd.DataFrame,
+    outlier_flags: pd.Series,
+    selection_df: pd.DataFrame,
+    candidate_ks: Iterable[int],
+    random_state: int = 42,
+) -> pd.DataFrame:
+    comparison_rows = []
+
+    for candidate_k in candidate_ks:
+        selection_match = selection_df.loc[selection_df["n_clusters"] == int(candidate_k)]
+        if selection_match.empty:
+            continue
+
+        candidate_labels = _fit_cluster_labels(
+            feature_table=feature_table.loc[~outlier_flags],
+            n_clusters=int(candidate_k),
+            random_state=random_state,
+        )
+        candidate_mapping = _build_mapping_df(
+            feature_table=feature_table,
+            outlier_flags=outlier_flags,
+            regular_labels=candidate_labels,
+        )
+        candidate_summary = summarize_clusters(feature_table, candidate_mapping)
+        metrics = selection_match.iloc[0].to_dict()
+
+        for _, row in candidate_summary.iterrows():
+            comparison_rows.append(
+                {
+                    "candidate_k": int(candidate_k),
+                    "cluster_id": int(row["cluster_id"]),
+                    "cluster_name": row["cluster_name"],
+                    "n_users": int(row["n_users"]),
+                    "cluster_mean_load": float(row["cluster_mean_load"]),
+                    "cluster_std_load": float(row["cluster_std_load"]),
+                    "cluster_day_night_ratio": float(row["cluster_day_night_ratio"]),
+                    "cluster_weekend_ratio": float(row["cluster_weekend_ratio"]),
+                    "cluster_peak_hour": float(row["cluster_peak_hour"]),
+                    "cluster_interpretation": row["cluster_interpretation"],
+                    "silhouette_score": float(metrics["silhouette_score"]),
+                    "min_cluster_size": int(metrics["min_cluster_size"]),
+                    "max_cluster_size": int(metrics["max_cluster_size"]),
+                    "balance_ratio": float(metrics["balance_ratio"]),
+                    "is_valid_under_min_cluster_size_rule": bool(
+                        metrics["is_valid_under_min_cluster_size_rule"]
+                    ),
+                    "n_outliers_removed": int(metrics["n_outliers_removed"]),
+                    "n_regular_users": int(metrics["n_regular_users"]),
+                }
+            )
+
+    comparison_columns = [
+        "candidate_k",
+        "cluster_id",
+        "cluster_name",
+        "n_users",
+        "cluster_mean_load",
+        "cluster_std_load",
+        "cluster_day_night_ratio",
+        "cluster_weekend_ratio",
+        "cluster_peak_hour",
+        "cluster_interpretation",
+        "silhouette_score",
+        "min_cluster_size",
+        "max_cluster_size",
+        "balance_ratio",
+        "is_valid_under_min_cluster_size_rule",
+        "n_outliers_removed",
+        "n_regular_users",
+    ]
+    if not comparison_rows:
+        return pd.DataFrame(columns=comparison_columns)
+
+    return (
+        pd.DataFrame(comparison_rows, columns=comparison_columns)
+        .sort_values(["candidate_k", "cluster_id"])
+        .reset_index(drop=True)
+    )
 
 
 def summarize_clusters(feature_table: pd.DataFrame, mapping_df: pd.DataFrame) -> pd.DataFrame:
@@ -218,30 +340,23 @@ def run_clustering_pipeline(
         min_cluster_size=min_cluster_size,
         random_state=random_state,
     )
-
-    mapping_regular = pd.DataFrame(
-        {
-            "user_id": regular_features.index,
-            "cluster_id": labels.astype(int),
-            "is_outlier": False,
-        }
+    mapping_df = _build_mapping_df(
+        feature_table=feature_table,
+        outlier_flags=outlier_flags,
+        regular_labels=labels,
     )
-    mapping_outliers = pd.DataFrame(
-        {
-            "user_id": feature_table.index[outlier_flags],
-            "cluster_id": -1,
-            "is_outlier": True,
-        }
-    )
-    mapping_df = pd.concat([mapping_regular, mapping_outliers], ignore_index=True).sort_values(
-        ["cluster_id", "user_id"]
-    )
-    mapping_df.reset_index(drop=True, inplace=True)
 
     summary_df = summarize_clusters(feature_table, mapping_df)
     mapping_df = mapping_df.merge(summary_df[["cluster_id", "cluster_name"]], on="cluster_id", how="left")
     selection_df["n_outliers_removed"] = int(outlier_flags.sum())
     selection_df["n_regular_users"] = int((~outlier_flags).sum())
+    choice_comparison_df = build_cluster_choice_comparison(
+        feature_table=feature_table,
+        outlier_flags=outlier_flags,
+        selection_df=selection_df,
+        candidate_ks=[k for k in [2, 3] if k in effective_cluster_range],
+        random_state=random_state,
+    )
 
     periods = compute_equal_size_periods(test_df.index, n_periods=n_periods)
     protocol = {
@@ -266,6 +381,7 @@ def run_clustering_pipeline(
 
     feature_table.to_csv(output_path / "cluster_feature_table.csv")
     selection_df.to_csv(output_path / "cluster_model_selection.csv", index=False)
+    choice_comparison_df.to_csv(output_path / "cluster_k_comparison.csv", index=False)
     mapping_df.to_csv(output_path / "user_cluster_mapping.csv", index=False)
     summary_df.to_csv(output_path / "cluster_summary.csv", index=False)
 

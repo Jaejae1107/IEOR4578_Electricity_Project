@@ -26,6 +26,10 @@
   <h2>PCA Scatter</h2>
   <img src="cluster_pca_scatter.svg" alt="Cluster PCA scatter plot" />
 
+  <h2>Regular-Only PCA Scatter</h2>
+  <p>This version removes the outlier users so the separation between the main clusters is easier to inspect.</p>
+  <img src="cluster_pca_regular_only.svg" alt="Regular-only cluster PCA scatter plot" />
+
   <h2>Cluster Summary Table</h2>
   <table>
     <thead>
@@ -35,5 +39,13 @@
       <tr><td>-1</td><td>outlier_irregular_profile</td><td>8</td><td>599.72</td><td>Users in this group were separated as outliers because their training-period profiles are materially different from the main population.</td></tr><tr><td>0</td><td>high_load_daytime_mixed_week</td><td>84</td><td>777.39</td><td>Average load is high, usage is daytime-leaning, and the weekly pattern is mixed_week.</td></tr><tr><td>1</td><td>low_load_daytime_mixed_week</td><td>64</td><td>569.63</td><td>Average load is low, usage is daytime-leaning, and the weekly pattern is mixed_week.</td></tr>
     </tbody>
   </table>
+
+  <h2>Supporting Files</h2>
+  <ul>
+    <li><a href="../cluster_summary.csv">cluster_summary.csv</a></li>
+    <li><a href="../user_cluster_mapping.csv">user_cluster_mapping.csv</a></li>
+    <li><a href="../cluster_model_selection.csv">cluster_model_selection.csv</a></li>
+    <li><a href="../cluster_k_comparison.csv">cluster_k_comparison.csv</a></li>
+  </ul>
 </body>
 </html>

@@ -94,6 +94,7 @@ CSV exports:
 Clustering artifacts:
 - `artifacts/clustering/cluster_feature_table.csv`: per-user train-only clustering features
 - `artifacts/clustering/cluster_model_selection.csv`: candidate `k` values with silhouette/min cluster size diagnostics
+- `artifacts/clustering/cluster_k_comparison.csv`: side-by-side cluster summaries for `k=2` and `k=3`
 - `artifacts/clustering/user_cluster_mapping.csv`: user-to-cluster mapping
 - `artifacts/clustering/cluster_summary.csv`: cluster-level summary statistics and interpretations
 - `artifacts/clustering/evaluation_protocol.json`: fixed split metadata and equal-size test periods
@@ -101,6 +102,7 @@ Clustering artifacts:
 - `artifacts/clustering/figures/cluster_size_bar.svg`: cluster size bar chart
 - `artifacts/clustering/figures/cluster_daily_profile.svg`: average 24-hour profile by cluster
 - `artifacts/clustering/figures/cluster_pca_scatter.svg`: 2D PCA projection of users colored by cluster
+- `artifacts/clustering/figures/cluster_pca_regular_only.svg`: PCA projection with outliers removed to inspect the main clusters more clearly
 
 ## 6) CSV Usage by Model Level
 
@@ -205,6 +207,7 @@ To satisfy the updated project requirement that testing regions be the same size
 - Use `artifacts/clustering/cluster_summary.csv` for the cluster-level numeric summary.
 - Use `artifacts/clustering/user_cluster_mapping.csv` to check the assigned cluster for a specific consumer ID.
 - Use `artifacts/clustering/cluster_model_selection.csv` to explain why the current `k` was selected.
+- Use `artifacts/clustering/cluster_k_comparison.csv` to compare the practical difference between `k=2` and `k=3`.
 
 ## 10) Modeling Step 1 (`src/modeling_step1/`)
 

@@ -77,6 +77,7 @@ class TestClusteringVisualizations(unittest.TestCase):
             self.assertTrue(os.path.exists(os.path.join(output_dir, "cluster_size_bar.svg")))
             self.assertTrue(os.path.exists(os.path.join(output_dir, "cluster_daily_profile.svg")))
             self.assertTrue(os.path.exists(os.path.join(output_dir, "cluster_pca_scatter.svg")))
+            self.assertTrue(os.path.exists(os.path.join(output_dir, "cluster_pca_regular_only.svg")))
             self.assertTrue(os.path.exists(os.path.join(output_dir, "index.html")))
 
 

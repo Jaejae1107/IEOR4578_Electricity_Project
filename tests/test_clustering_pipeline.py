@@ -85,10 +85,15 @@ class TestClusteringPipeline(unittest.TestCase):
             self.assertEqual(result["n_users"], 6)
             self.assertTrue(os.path.exists(os.path.join(output_dir, "cluster_feature_table.csv")))
             self.assertTrue(os.path.exists(os.path.join(output_dir, "cluster_model_selection.csv")))
+            self.assertTrue(os.path.exists(os.path.join(output_dir, "cluster_k_comparison.csv")))
             self.assertTrue(os.path.exists(os.path.join(output_dir, "user_cluster_mapping.csv")))
             self.assertTrue(os.path.exists(os.path.join(output_dir, "cluster_summary.csv")))
             protocol_path = os.path.join(output_dir, "evaluation_protocol.json")
             self.assertTrue(os.path.exists(protocol_path))
+
+            comparison_df = pd.read_csv(os.path.join(output_dir, "cluster_k_comparison.csv"))
+            self.assertIn("candidate_k", comparison_df.columns)
+            self.assertIn(2, comparison_df["candidate_k"].tolist())
 
             with open(protocol_path, "r", encoding="utf-8") as f:
                 protocol = json.load(f)
