@@ -9,6 +9,7 @@ if SRC_DIR not in sys.path:
     sys.path.insert(0, SRC_DIR)
 
 from clustering_pipeline.pipeline import run_clustering_pipeline
+from clustering_pipeline.visualize import generate_clustering_visualizations
 
 
 def main() -> None:
@@ -49,12 +50,19 @@ def main() -> None:
         output_dir=args.output_dir,
         n_periods=args.n_periods,
     )
+    generate_clustering_visualizations(
+        feature_table_path=os.path.join(args.output_dir, "cluster_feature_table.csv"),
+        mapping_path=os.path.join(args.output_dir, "user_cluster_mapping.csv"),
+        summary_path=os.path.join(args.output_dir, "cluster_summary.csv"),
+        output_dir=os.path.join(args.output_dir, "figures"),
+    )
 
     print("=== Clustering Pipeline Completed ===")
     print(f"Users clustered: {result['n_users']}")
     print(f"Outliers separated before clustering: {result['n_outliers']}")
     print(f"Selected number of clusters: {result['best_k']}")
     print(f"Output directory: {result['output_dir']}")
+    print(f"Figure index: {os.path.join(args.output_dir, 'figures', 'index.html')}")
     for period in result["test_periods"]:
         print(
             f"Period {period['period_id']}: {period['start']} -> {period['end']} "

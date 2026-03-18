@@ -97,6 +97,10 @@ Clustering artifacts:
 - `artifacts/clustering/user_cluster_mapping.csv`: user-to-cluster mapping
 - `artifacts/clustering/cluster_summary.csv`: cluster-level summary statistics and interpretations
 - `artifacts/clustering/evaluation_protocol.json`: fixed split metadata and equal-size test periods
+- `artifacts/clustering/figures/index.html`: one-page visual summary of the clustering results
+- `artifacts/clustering/figures/cluster_size_bar.svg`: cluster size bar chart
+- `artifacts/clustering/figures/cluster_daily_profile.svg`: average 24-hour profile by cluster
+- `artifacts/clustering/figures/cluster_pca_scatter.svg`: 2D PCA projection of users colored by cluster
 
 ## 6) CSV Usage by Model Level
 
@@ -194,6 +198,13 @@ To satisfy the updated project requirement that testing regions be the same size
 - Default outlier handling uses `IsolationForest(contamination=0.05)`.
 - `cluster_model_selection.csv` should be reviewed before finalizing the production cluster count.
 - The current scaffold is intended to accelerate experimentation; outlier handling and cluster-specific forecasting still need to be refined for the final submission.
+
+### Where to inspect the results
+
+- Start with `artifacts/clustering/figures/index.html` for the easiest visual summary.
+- Use `artifacts/clustering/cluster_summary.csv` for the cluster-level numeric summary.
+- Use `artifacts/clustering/user_cluster_mapping.csv` to check the assigned cluster for a specific consumer ID.
+- Use `artifacts/clustering/cluster_model_selection.csv` to explain why the current `k` was selected.
 
 ## 10) Modeling Step 1 (`src/modeling_step1/`)
 

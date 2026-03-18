@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="560" viewBox="0 0 960 560">
+<rect width="100%" height="100%" fill="#FFFFFF"/>
+<text x="40" y="42" font-size="24" font-family="Arial, sans-serif" fill="#111111">Average Daily Load Profile by Cluster</text>
+<line x1="90" y1="480" x2="760" y2="480" stroke="#222" stroke-width="2"/>
+<line x1="90" y1="80" x2="90" y2="480" stroke="#222" stroke-width="2"/>
+<line x1="90.0" y1="80" x2="90.0" y2="480" stroke="#EEE" stroke-width="1"/>
+<text x="90.0" y="502" text-anchor="middle" font-size="11" font-family="Arial, sans-serif" fill="#444">0</text>
+<line x1="119.1" y1="80" x2="119.1" y2="480" stroke="#EEE" stroke-width="1"/>
+<text x="119.1" y="502" text-anchor="middle" font-size="11" font-family="Arial, sans-serif" fill="#444">1</text>
+<line x1="148.3" y1="80" x2="148.3" y2="480" stroke="#EEE" stroke-width="1"/>
+<text x="148.3" y="502" text-anchor="middle" font-size="11" font-family="Arial, sans-serif" fill="#444">2</text>
+<line x1="177.4" y1="80" x2="177.4" y2="480" stroke="#EEE" stroke-width="1"/>
+<text x="177.4" y="502" text-anchor="middle" font-size="11" font-family="Arial, sans-serif" fill="#444">3</text>
+<line x1="206.5" y1="80" x2="206.5" y2="480" stroke="#EEE" stroke-width="1"/>
+<text x="206.5" y="502" text-anchor="middle" font-size="11" font-family="Arial, sans-serif" fill="#444">4</text>
+<line x1="235.7" y1="80" x2="235.7" y2="480" stroke="#EEE" stroke-width="1"/>
+<text x="235.7" y="502" text-anchor="middle" font-size="11" font-family="Arial, sans-serif" fill="#444">5</text>
+<line x1="264.8" y1="80" x2="264.8" y2="480" stroke="#EEE" stroke-width="1"/>
+<text x="264.8" y="502" text-anchor="middle" font-size="11" font-family="Arial, sans-serif" fill="#444">6</text>
+<line x1="293.9" y1="80" x2="293.9" y2="480" stroke="#EEE" stroke-width="1"/>
+<text x="293.9" y="502" text-anchor="middle" font-size="11" font-family="Arial, sans-serif" fill="#444">7</text>
+<line x1="323.0" y1="80" x2="323.0" y2="480" stroke="#EEE" stroke-width="1"/>
+<text x="323.0" y="502" text-anchor="middle" font-size="11" font-family="Arial, sans-serif" fill="#444">8</text>
+<line x1="352.2" y1="80" x2="352.2" y2="480" stroke="#EEE" stroke-width="1"/>
+<text x="352.2" y="502" text-anchor="middle" font-size="11" font-family="Arial, sans-serif" fill="#444">9</text>
+<line x1="381.3" y1="80" x2="381.3" y2="480" stroke="#EEE" stroke-width="1"/>
+<text x="381.3" y="502" text-anchor="middle" font-size="11" font-family="Arial, sans-serif" fill="#444">10</text>
+<line x1="410.4" y1="80" x2="410.4" y2="480" stroke="#EEE" stroke-width="1"/>
+<text x="410.4" y="502" text-anchor="middle" font-size="11" font-family="Arial, sans-serif" fill="#444">11</text>
+<line x1="439.6" y1="80" x2="439.6" y2="480" stroke="#EEE" stroke-width="1"/>
+<text x="439.6" y="502" text-anchor="middle" font-size="11" font-family="Arial, sans-serif" fill="#444">12</text>
+<line x1="468.7" y1="80" x2="468.7" y2="480" stroke="#EEE" stroke-width="1"/>
+<text x="468.7" y="502" text-anchor="middle" font-size="11" font-family="Arial, sans-serif" fill="#444">13</text>
+<line x1="497.8" y1="80" x2="497.8" y2="480" stroke="#EEE" stroke-width="1"/>
+<text x="497.8" y="502" text-anchor="middle" font-size="11" font-family="Arial, sans-serif" fill="#444">14</text>
+<line x1="527.0" y1="80" x2="527.0" y2="480" stroke="#EEE" stroke-width="1"/>
+<text x="527.0" y="502" text-anchor="middle" font-size="11" font-family="Arial, sans-serif" fill="#444">15</text>
+<line x1="556.1" y1="80" x2="556.1" y2="480" stroke="#EEE" stroke-width="1"/>
+<text x="556.1" y="502" text-anchor="middle" font-size="11" font-family="Arial, sans-serif" fill="#444">16</text>
+<line x1="585.2" y1="80" x2="585.2" y2="480" stroke="#EEE" stroke-width="1"/>
+<text x="585.2" y="502" text-anchor="middle" font-size="11" font-family="Arial, sans-serif" fill="#444">17</text>
+<line x1="614.3" y1="80" x2="614.3" y2="480" stroke="#EEE" stroke-width="1"/>
+<text x="614.3" y="502" text-anchor="middle" font-size="11" font-family="Arial, sans-serif" fill="#444">18</text>
+<line x1="643.5" y1="80" x2="643.5" y2="480" stroke="#EEE" stroke-width="1"/>
+<text x="643.5" y="502" text-anchor="middle" font-size="11" font-family="Arial, sans-serif" fill="#444">19</text>
+<line x1="672.6" y1="80" x2="672.6" y2="480" stroke="#EEE" stroke-width="1"/>
+<text x="672.6" y="502" text-anchor="middle" font-size="11" font-family="Arial, sans-serif" fill="#444">20</text>
+<line x1="701.7" y1="80" x2="701.7" y2="480" stroke="#EEE" stroke-width="1"/>
+<text x="701.7" y="502" text-anchor="middle" font-size="11" font-family="Arial, sans-serif" fill="#444">21</text>
+<line x1="730.9" y1="80" x2="730.9" y2="480" stroke="#EEE" stroke-width="1"/>
+<text x="730.9" y="502" text-anchor="middle" font-size="11" font-family="Arial, sans-serif" fill="#444">22</text>
+<text x="760.0" y="502" text-anchor="middle" font-size="11" font-family="Arial, sans-serif" fill="#444">23</text>
+<line x1="90" y1="480.0" x2="760" y2="480.0" stroke="#F1F1F1" stroke-width="1"/>
+<text x="78" y="484.0" text-anchor="end" font-size="12" font-family="Arial, sans-serif" fill="#444">0.00</text>
+<line x1="90" y1="400.0" x2="760" y2="400.0" stroke="#F1F1F1" stroke-width="1"/>
+<text x="78" y="404.0" text-anchor="end" font-size="12" font-family="Arial, sans-serif" fill="#444">0.27</text>
+<line x1="90" y1="320.0" x2="760" y2="320.0" stroke="#F1F1F1" stroke-width="1"/>
+<text x="78" y="324.0" text-anchor="end" font-size="12" font-family="Arial, sans-serif" fill="#444">0.54</text>
+<line x1="90" y1="240.0" x2="760" y2="240.0" stroke="#F1F1F1" stroke-width="1"/>
+<text x="78" y="244.0" text-anchor="end" font-size="12" font-family="Arial, sans-serif" fill="#444">0.82</text>
+<line x1="90" y1="160.0" x2="760" y2="160.0" stroke="#F1F1F1" stroke-width="1"/>
+<text x="78" y="164.0" text-anchor="end" font-size="12" font-family="Arial, sans-serif" fill="#444">1.09</text>
+<line x1="90" y1="80.0" x2="760" y2="80.0" stroke="#F1F1F1" stroke-width="1"/>
+<text x="78" y="84.0" text-anchor="end" font-size="12" font-family="Arial, sans-serif" fill="#444">1.36</text>
+<polyline fill="none" stroke="#D62728" stroke-width="3" points="90.0,138.6 119.1,153.4 148.3,224.7 177.4,261.1 206.5,279.1 235.7,289.8 264.8,273.8 293.9,276.8 323.0,240.8 352.2,236.1 381.3,239.3 410.4,216.8 439.6,211.2 468.7,208.6 497.8,208.0 527.0,204.3 556.1,194.4 585.2,176.2 614.3,158.1 643.5,145.7 672.6,132.0 701.7,162.1 730.9,151.7 760.0,153.4" opacity="0.95"/>
+<rect x="770" y="80" width="16" height="16" fill="#D62728" />
+<text x="794" y="93" font-size="12" font-family="Arial, sans-serif" fill="#222">COut: outlier_irregular_profile</text>
+<polyline fill="none" stroke="#1F77B4" stroke-width="3" points="90.0,298.1 119.1,311.5 148.3,317.1 177.4,320.5 206.5,319.5 235.7,305.1 264.8,260.3 293.9,208.5 323.0,193.8 352.2,144.0 381.3,123.6 410.4,113.2 439.6,108.6 468.7,109.4 497.8,112.4 527.0,111.6 556.1,107.1 585.2,100.9 614.3,99.0 643.5,104.4 672.6,118.5 701.7,138.1 730.9,189.2 760.0,258.3" opacity="0.95"/>
+<rect x="770" y="108" width="16" height="16" fill="#1F77B4" />
+<text x="794" y="121" font-size="12" font-family="Arial, sans-serif" fill="#222">C0: high_load_daytime_mixed_week</text>
+<polyline fill="none" stroke="#2CA02C" stroke-width="3" points="90.0,275.9 119.1,288.6 148.3,294.5 177.4,297.0 206.5,297.5 235.7,283.2 264.8,230.9 293.9,186.1 323.0,184.0 352.2,151.9 381.3,137.3 410.4,131.8 439.6,129.5 468.7,132.1 497.8,134.7 527.0,130.9 556.1,126.2 585.2,119.9 614.3,115.4 643.5,120.2 672.6,131.8 701.7,148.1 730.9,184.6 760.0,240.6" opacity="0.95"/>
+<rect x="770" y="136" width="16" height="16" fill="#2CA02C" />
+<text x="794" y="149" font-size="12" font-family="Arial, sans-serif" fill="#222">C1: low_load_daytime_mixed_week</text>
+</svg>
