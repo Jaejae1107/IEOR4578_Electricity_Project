@@ -330,7 +330,7 @@ A global deep learning model is implemented for **720-hour-ahead** (rolling chun
 |-------|----------|----------|-----------|
 | iTransformer | 228,639 | 119.89 | 0.175 |
 
-## 13) Overall Model Comparison (Test Set)
+## 13) Overall Model Comparison — Steps 1–3 (Test Set)
 
 | Level | Model | Test MSE | Test MAE | Test WAPE |
 |-------|-------|----------|----------|-----------|
@@ -429,7 +429,118 @@ AutoARIMA achieves an overall MAPE of 18.7% with stable error distribution acros
 <img src="src/modeling_step4/AutoETS_Boxplot_Cluster.png" width="49%"> <img src="src/modeling_step4/AutoETS_Boxplot_Period.png" width="49%">
 
 
-## 15) Interactive Dashboard (`dashboard/`)
+## 15) Modeling Step 5 (`src/modeling_step5/`)
+
+Cluster-aggregated covariate forecasting following a three-stage pipeline:
+
+1. **Aggregate** — all users assigned to a cluster are averaged into a single representative series per cluster. This reduces noise and produces a smoother signal for the model to learn from.
+2. **Train** — one SARIMAX/Prophet model is fitted on each cluster-averaged series (plus one individual model per outlier user). The model learns the shared temporal pattern of the cluster.
+3. **Disaggregate** — at prediction time the cluster-level forecast is broadcast unchanged to every user in that cluster. Each user in the same cluster therefore receives the same predicted value, which approximates their individual load via the cluster mean.
+
+Outlier users (cluster -1) bypass aggregation entirely and each receive their own individually fitted model.
+
+### Models
+
+#### SARIMAX_cluster.ipynb — AutoARIMA on Cluster-Aggregated Series (Level 2)
+
+- Library: `statsforecast` `AutoARIMA`
+- Format: long-format (`master_long_hourly_*.csv`)
+- Cluster strategy: 8 outlier users → individual models; `cluster_0` (84 users) + `cluster_1` (64 users) → one averaged series each = **10 models total**
+- Lookback: 672 h (4-week window) | Season length: 24
+- Exogenous features: `hour_sin/cos`, `dow_sin/cos`, `is_weekend`, `month_sin/cos`
+- Parameters: `approximation=True`, `stepwise=True`
+- Retrained on train+val before final test evaluation
+
+**Test results — Overall:** MSE = 256,005 | MAE = 126.42 | MAPE = 17.63 | WAPE = 0.185
+
+**Test results — By Period:**
+
+| Period   | Date Range                    | MAPE   |
+|----------|-------------------------------|--------|
+| Period 1 | 2014-05-01 → 2014-06-30       | 14.93% |
+| Period 2 | 2014-07-01 → 2014-08-30       | 18.19% |
+| Period 3 | 2014-08-31 → 2014-10-31       | 18.44% |
+| Period 4 | 2014-11-01 → 2014-12-31       | 19.00% |
+
+---
+
+#### Prophet_cluster.ipynb — Prophet on Cluster-Aggregated Series (Level 2)
+
+- Library: `prophet`
+- Format: long-format (`master_long_hourly_*.csv`)
+- Cluster strategy: 8 outlier users → individual models; `cluster_0` (84 users) + `cluster_1` (64 users) → one averaged series each = **10 models total**
+- Seasonalities: daily, weekly, yearly (additive mode)
+- Exogenous regressors: `is_weekend` + cyclic `hour_sin/cos`, `dow_sin/cos`, `month_sin/cos`
+- Retrained on train+val before final test evaluation
+
+**Test results — Overall:** MSE = 131,658 | MAE = 97.50 | MAPE = 19.57 | WAPE = 0.143
+
+**Test results — By Period:**
+
+| Period   | Date Range                    | MAPE   |
+|----------|-------------------------------|--------|
+| Period 1 | 2014-05-01 → 2014-06-30       | 16.34% |
+| Period 2 | 2014-07-01 → 2014-08-30       | 22.00% |
+| Period 3 | 2014-08-31 → 2014-10-31       | 18.44% |
+| Period 4 | 2014-11-01 → 2014-12-31       | 21.52% |
+
+### Error Distribution (Box Plots)
+
+SARIMAX achieves a lower overall MAPE (17.6%) with more stable period-to-period variance compared to Prophet (19.6%). Prophet produces lower MSE and WAPE overall, reflecting its robustness to seasonal patterns even when trained on cluster-averaged series.
+
+**SARIMAX**
+
+<img src="src/modeling_step5/SARIMAX_Boxplot_Cluster.png" width="49%"> <img src="src/modeling_step5/SARIMAX_Boxplot_Period.png" width="49%">
+
+**Prophet**
+
+<img src="src/modeling_step5/Prophet_Boxplot_Cluster.png" width="49%"> <img src="src/modeling_step5/Prophet_Boxplot_Period.png" width="49%">
+
+
+## 16) Modeling Step 6 (`src/modeling_step6/`)
+
+Cluster-based iTransformer forecasting: one iTransformer model is trained per cluster using the per-user data of all cluster members simultaneously as a multivariate input. No series aggregation is performed; each model attends across all users in its cluster.
+
+iTransformer's core mechanism is **inverted attention across variates** — it treats each time series as a token and learns cross-series correlations. A model with only one series provides no cross-variate signal to attend over, making single-client training meaningless for this architecture. The 8 outlier users are therefore grouped into a single model so that iTransformer has at least a small set of variates to learn from, even though these users share no coherent consumption pattern.
+
+### Models
+
+#### iTransformer_cluster.ipynb — iTransformer per Cluster (Level 3)
+
+- Library: `neuralforecast` `iTransformer`
+- Format: long-format converted to wide for NeuralForecast; each cluster trained independently
+- Cluster strategy: `cluster_0` (84 users), `cluster_1` (64 users), `outliers` (8 users) → **3 separate NeuralForecast instances**
+- Chunk horizon: 720 h (~1 month) | Input size: 672 h (4-week lookback)
+- Rolling prediction: each 720 h chunk's predictions are appended as history before the next chunk
+- Architecture: `hidden=512`, `n_heads=8`, `e_layers=2`, `d_layers=1`, `d_ff=2048`, `dropout=0.1`
+- Loss: MSE (train) / MAE (validation); early stopping `patience=10 steps`, `val_check=100 steps`
+- Exogenous features: `hour_sin/cos`, `dow_sin/cos`, `is_weekend`, `month_sin/cos`
+- Scaler: standard (per-series normalization)
+- Saved models: `itransformer_val_{cluster}/`, `itransformer_final_{cluster}/`
+
+**Train results (in-sample proxy, 156 clients, overall):** MSE = 96,635 | MAE = 73.81 | MAPE = 22.66 | WAPE = 0.119
+
+**Validation results (156 clients, overall):** MSE = 70,836 | MAE = 74.43 | MAPE = 17.87 | WAPE = 0.121
+
+**Test results — Overall:** MSE = 157,620 | MAE = 98.25 | MAPE = 18.11 | WAPE = 0.144
+
+**Test results — By Period:**
+
+| Period   | Date Range                    | Mean MAPE | Median MAPE |
+|----------|-------------------------------|-----------|-------------|
+| Period 1 | 2014-05-01 → 2014-06-30       | 12.09%    | 9.56%       |
+| Period 2 | 2014-07-01 → 2014-08-30       | 15.60%    | 13.96%      |
+| Period 3 | 2014-08-31 → 2014-10-31       | 16.87%    | 14.66%      |
+| Period 4 | 2014-11-01 → 2014-12-31       | 29.74%    | 25.02%      |
+
+### Error Distribution (Box Plots)
+
+iTransformer achieves the lowest mean MAPE across the first three test periods (12–17%) among all cluster-based models, but degrades sharply in Period 4 (late fall/winter, 29.7%) — consistent with the pattern seen in non-clustered iTransformer. Cluster-level training visibly compresses the per-user MAPE distribution compared to the single global model.
+
+<img src="src/modeling_step6/iTransformer_Boxplot_Cluster.png" width="49%"> <img src="src/modeling_step6/iTransformer_Boxplot_Period.png" width="49%">
+
+
+## 17) Interactive Dashboard (`dashboard/`)
 
 A Streamlit dashboard for interactively comparing model predictions against actual values. Users can select any combination of the 5 models, browse all 156 clients, and filter by date range. Displays per-client and overall metrics (MSE, MAE, WAPE) alongside an interactive Plotly line chart.
 
