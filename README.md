@@ -330,7 +330,7 @@ A global deep learning model is implemented for **720-hour-ahead** (rolling chun
 |-------|----------|----------|-----------|
 | iTransformer | 228,639 | 119.89 | 0.175 |
 
-## 13) Overall Model Comparison — Steps 1–3 (Test Set)
+## 13) Overall Model Comparison (Test Set)
 
 | Level | Model | Test MSE | Test MAE | Test WAPE |
 |-------|-------|----------|----------|-----------|
