@@ -343,7 +343,93 @@ A global deep learning model is implemented for **720-hour-ahead** (rolling chun
 
 Per-client AutoARIMA (Level 1) achieves the best WAPE (0.145) among all per-client models, followed by Prophet (Level 2, 0.166) and iTransformer (Level 3, 0.175). iTransformer outperforms SARIMAX and AutoETS but underperforms both AutoARIMA and Prophet. All models show high per-client variance; outlier clients (e.g., MT_196, MT_279, MT_208) with large absolute loads produce significantly elevated errors.
 
-## 14) Interactive Dashboard (`dashboard/`)
+## 14) Modeling Step 4 (`src/modeling_step4/`)
+
+Clustering-based forecasting pipeline where users are grouped by consumption pattern and one model is trained per cluster using only training data.
+
+### Cluster Summary
+
+| Cluster ID | Cluster Name                  | N Users |
+|------------|-------------------------------|---------|
+| -1         | outlier_irregular_profile     | 8       |
+| 0          | high_load_daytime_mixed_week  | 84      |
+| 1          | low_load_daytime_mixed_week   | 64      |
+
+### Models
+
+#### AutoARIMA_Cluster.ipynb — AutoARIMA (Level 1)
+
+- Library: `statsforecast` `AutoARIMA`
+- Format: long-format (`master_long_hourly_*.csv`)
+- One model trained per cluster (3 separate StatsForecast instances)
+- Horizon: full test set per cluster | Lookback: 672 h (4-week window)
+- Parameters: `season_length=24`, `approximation=True`, `stepwise=True`
+- Retrained on train+val before final test evaluation
+
+**Test results — Overall:** MAPE = 18.726
+
+**Test results — By Period:**
+
+| Period   | Date Range                    | MAPE   |
+|----------|-------------------------------|--------|
+| Period 1 | 2014-05-01 → 2014-06-30       | 11.506 |
+| Period 2 | 2014-07-01 → 2014-08-30       | 17.815 |
+| Period 3 | 2014-08-31 → 2014-10-31       | 20.234 |
+| Period 4 | 2014-11-01 → 2014-12-31       | 25.485 |
+
+**Test results — By Cluster:**
+
+| Cluster ID | Cluster Name                 | MAPE   |
+|------------|------------------------------|--------|
+| -1         | outlier_irregular_profile    | 38.857 |
+| 0          | high_load_daytime_mixed_week | 14.552 |
+| 1          | low_load_daytime_mixed_week  | 21.829 |
+
+---
+
+#### AutoETS_Cluster.ipynb — AutoETS (Level 1)
+
+- Library: `statsforecast` `AutoETS`
+- Format: long-format (`master_long_hourly_*.csv`)
+- One model trained per cluster (3 separate StatsForecast instances)
+- Horizon: full test set per cluster | Lookback: 672 h (4-week window)
+- Parameters: `season_length=24`
+- Retrained on train+val before final test evaluation
+- Note: Cluster -1 (outlier) produces extremely high MAPE due to near-zero actual values causing numerical instability in ETS error calculation
+
+**Test results — Overall:** MAPE = 36.199
+
+**Test results — By Period:**
+
+| Period   | Date Range                    | MAPE   |
+|----------|-------------------------------|--------|
+| Period 1 | 2014-05-01 → 2014-06-30       | 18.210 |
+| Period 2 | 2014-07-01 → 2014-08-30       | 31.832 |
+| Period 3 | 2014-08-31 → 2014-10-31       | 39.966 |
+| Period 4 | 2014-11-01 → 2014-12-31       | 55.166 |
+
+**Test results — By Cluster:**
+
+| Cluster ID | Cluster Name                 | MAPE    |
+|------------|------------------------------|---------|
+| -1         | outlier_irregular_profile    | 467.714 |
+| 0          | high_load_daytime_mixed_week | 11.588  |
+| 1          | low_load_daytime_mixed_week  | 17.643  |
+
+### Error Distribution (Box Plots)
+
+AutoARIMA achieves an overall MAPE of 18.7% with stable error distribution across all clusters, while AutoETS scores 36.2% overall — largely driven by Cluster -1 where near-zero consumption values cause ETS to produce extreme errors (up to 5,500%).
+
+**AutoARIMA**
+
+<img src="src/modeling_step4/AutoARIMA_Boxplot_Cluster.png" width="49%"> <img src="src/modeling_step4/AutoARIMA_Boxplot_Period.png" width="49%">
+
+**AutoETS**
+
+<img src="src/modeling_step4/AutoETS_Boxplot_Cluster.png" width="49%"> <img src="src/modeling_step4/AutoETS_Boxplot_Period.png" width="49%">
+
+
+## 15) Interactive Dashboard (`dashboard/`)
 
 A Streamlit dashboard for interactively comparing model predictions against actual values. Users can select any combination of the 5 models, browse all 156 clients, and filter by date range. Displays per-client and overall metrics (MSE, MAE, WAPE) alongside an interactive Plotly line chart.
 
