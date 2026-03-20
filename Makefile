@@ -1,10 +1,13 @@
 PYTHON ?= /Library/Frameworks/Python.framework/Versions/3.11/bin/python3
 CONFIG ?= config.json
 
-.PHONY: run test clean
+.PHONY: run cluster test clean
 
 run:
 	$(PYTHON) run_pipeline.py --config $(CONFIG)
+
+cluster:
+	$(PYTHON) run_clustering_pipeline.py
 
 test:
 	$(PYTHON) -m unittest discover -s tests -p "test_*.py" -v

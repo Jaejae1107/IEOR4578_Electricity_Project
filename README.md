@@ -50,6 +50,7 @@ make test
 - `config.json`: pipeline configuration (input path, rules, output names)
 - `requirements.txt`: Python dependencies
 - `run_pipeline.py`: main CLI entrypoint (Step 1 -> Step 2 -> Step 3)
+- `run_clustering_pipeline.py`: clustering CLI entrypoint (train-only user clustering + evaluation protocol export)
 - `preprocess_ld.py`: legacy single-file runner (kept for compatibility)
 
 ### Source package (`src/ld_preprocessing`)
@@ -60,6 +61,13 @@ make test
 - `step2_hourly_dst_inactive.py`: Step 2 (hourly downsample, DST drop, inactive filtering)
 - `step3_save_outputs.py`: Step 3 (save master + metadata + optional aggregate)
 
+### Source package (`src/clustering_pipeline`)
+
+- `__init__.py`: package marker
+- `features.py`: train-only user feature engineering for clustering
+- `evaluation.py`: fixed evaluation protocol helpers (`MAPE_0_100`, equal-size test periods)
+- `pipeline.py`: clustering orchestration, cluster selection, mapping, and summary export
+
 ### Tests (`tests`)
 
 - `test_step1.py`: Step 1 unit tests
@@ -67,6 +75,7 @@ make test
 - `test_step3.py`: Step 3 unit tests
 - `test_pipeline.py`: end-to-end pipeline test on tiny synthetic data
 - `tests/__pycache__/...`: auto-generated cache files (not source)
+- `test_clustering_pipeline.py`: clustering feature extraction, equal-size periods, and export tests
 
 ### Generated output data
 
@@ -81,6 +90,19 @@ CSV exports:
 - `calendar_features_hourly.csv`: timestamp-level calendar features for exogenous models
 - `master_long_hourly.csv`: long-format panel (`timestamp`, `client_id`, `y`)
 - `active_clients.csv`: active client ID list
+
+Clustering artifacts:
+- `artifacts/clustering/cluster_feature_table.csv`: per-user train-only clustering features
+- `artifacts/clustering/cluster_model_selection.csv`: candidate `k` values with silhouette/min cluster size diagnostics
+- `artifacts/clustering/cluster_k_comparison.csv`: side-by-side cluster summaries for `k=2` and `k=3`
+- `artifacts/clustering/user_cluster_mapping.csv`: user-to-cluster mapping
+- `artifacts/clustering/cluster_summary.csv`: cluster-level summary statistics and interpretations
+- `artifacts/clustering/evaluation_protocol.json`: fixed split metadata and equal-size test periods
+- `artifacts/clustering/figures/index.html`: one-page visual summary of the clustering results
+- `artifacts/clustering/figures/cluster_size_bar.svg`: cluster size bar chart
+- `artifacts/clustering/figures/cluster_daily_profile.svg`: average 24-hour profile by cluster
+- `artifacts/clustering/figures/cluster_pca_scatter.svg`: 2D PCA projection of users colored by cluster
+- `artifacts/clustering/figures/cluster_pca_regular_only.svg`: PCA projection with outliers removed to inspect the main clusters more clearly
 
 ## 6) CSV Usage by Model Level
 
@@ -131,7 +153,63 @@ No timestamp overlap exists between the three splits.
 - `master_long_hourly_validation_2014_01_04.csv` — shape `(445536, 3)`
 - `master_long_hourly_test_2014_05_12.csv` — shape `(913536, 3)`
 
-## 9) Modeling Step 1 (`src/modeling_step1/`)
+## 9) Clustering Pipeline
+
+This repository now includes a baseline clustering scaffold for the updated project requirements. The clustering stage uses **training data only** (`2012-01-01` to `2013-12-31`) to avoid leakage into validation or test periods.
+
+### Run
+
+```bash
+make cluster
+```
+
+or
+
+```bash
+/Library/Frameworks/Python.framework/Versions/3.11/bin/python3 run_clustering_pipeline.py
+```
+
+### What it does
+
+- Builds per-user clustering features from the training split only
+- Uses pattern-oriented clustering features by default:
+  - normalized hourly profile
+  - normalized weekday profile
+  - normalized monthly profile
+  - `weekend_ratio`, `day_night_ratio`, `peak_hour`
+- Separates irregular users with `IsolationForest` before fitting the main clusters
+- Evaluates candidate cluster counts (`k=2..8`) using silhouette score
+- Exports a user-to-cluster mapping
+- Exports cluster summary statistics and interpretation labels
+- Exports an evaluation protocol JSON with:
+  - fixed train / validation / test windows
+  - `MAPE_0_100` as the main metric
+  - four **equal-size** test periods
+
+### Equal-size test periods (4-way split)
+
+To satisfy the updated project requirement that testing regions be the same size, the test set is divided into the following four equal-size hourly periods:
+
+- Period 1: `2014-05-01 00:00:00` to `2014-06-30 23:00:00` (`1464` hours)
+- Period 2: `2014-07-01 00:00:00` to `2014-08-30 23:00:00` (`1464` hours)
+- Period 3: `2014-08-31 00:00:00` to `2014-10-31 23:00:00` (`1464` hours)
+- Period 4: `2014-11-01 00:00:00` to `2014-12-31 23:00:00` (`1464` hours)
+
+### Notes
+
+- Default outlier handling uses `IsolationForest(contamination=0.05)`.
+- `cluster_model_selection.csv` should be reviewed before finalizing the production cluster count.
+- The current scaffold is intended to accelerate experimentation; outlier handling and cluster-specific forecasting still need to be refined for the final submission.
+
+### Where to inspect the results
+
+- Start with `artifacts/clustering/figures/index.html` for the easiest visual summary.
+- Use `artifacts/clustering/cluster_summary.csv` for the cluster-level numeric summary.
+- Use `artifacts/clustering/user_cluster_mapping.csv` to check the assigned cluster for a specific consumer ID.
+- Use `artifacts/clustering/cluster_model_selection.csv` to explain why the current `k` was selected.
+- Use `artifacts/clustering/cluster_k_comparison.csv` to compare the practical difference between `k=2` and `k=3`.
+
+## 10) Modeling Step 1 (`src/modeling_step1/`)
 
 Three forecasting models are implemented for **24-hour-ahead** electricity load forecasting across 156 active clients, with an additional aggregate single-series benchmark.
 
@@ -182,7 +260,7 @@ Three forecasting models are implemented for **24-hour-ahead** electricity load 
 
 AutoARIMA outperformed AutoETS (WAPE 0.213); AutoETS likely anchored on the late December 2013 consumption peak, causing persistent overestimation early in the validation period. Aggregate benchmark (WAPE 0.1004) showed lower error than per-client (WAPE 0.1448)
 
-## 10) Modeling Step 2 (`src/modeling_step2/`)
+## 11) Modeling Step 2 (`src/modeling_step2/`)
 
 Two covariate forecasting models are implemented for **24-hour-ahead** electricity load forecasting across 156 active clients.
 
@@ -220,7 +298,7 @@ Two covariate forecasting models are implemented for **24-hour-ahead** electrici
 
 Prophet outperforms AutoARIMA on all metrics at the covariate level.
 
-## 11) Modeling Step 3 (`src/modeling_step3/`)
+## 12) Modeling Step 3 (`src/modeling_step3/`)
 
 A global deep learning model is implemented for **720-hour-ahead** (rolling chunk) electricity load forecasting across all 156 active clients simultaneously.
 
@@ -252,7 +330,7 @@ A global deep learning model is implemented for **720-hour-ahead** (rolling chun
 |-------|----------|----------|-----------|
 | iTransformer | 228,639 | 119.89 | 0.175 |
 
-## 12) Overall Model Comparison (Test Set)
+## 13) Overall Model Comparison (Test Set)
 
 | Level | Model | Test MSE | Test MAE | Test WAPE |
 |-------|-------|----------|----------|-----------|
@@ -265,7 +343,93 @@ A global deep learning model is implemented for **720-hour-ahead** (rolling chun
 
 Per-client AutoARIMA (Level 1) achieves the best WAPE (0.145) among all per-client models, followed by Prophet (Level 2, 0.166) and iTransformer (Level 3, 0.175). iTransformer outperforms SARIMAX and AutoETS but underperforms both AutoARIMA and Prophet. All models show high per-client variance; outlier clients (e.g., MT_196, MT_279, MT_208) with large absolute loads produce significantly elevated errors.
 
-## 13) Interactive Dashboard (`dashboard/`)
+## 14) Modeling Step 4 (`src/modeling_step4/`)
+
+Clustering-based forecasting pipeline where users are grouped by consumption pattern and one model is trained per cluster using only training data.
+
+### Cluster Summary
+
+| Cluster ID | Cluster Name                  | N Users |
+|------------|-------------------------------|---------|
+| -1         | outlier_irregular_profile     | 8       |
+| 0          | high_load_daytime_mixed_week  | 84      |
+| 1          | low_load_daytime_mixed_week   | 64      |
+
+### Models
+
+#### AutoARIMA_Cluster.ipynb — AutoARIMA (Level 1)
+
+- Library: `statsforecast` `AutoARIMA`
+- Format: long-format (`master_long_hourly_*.csv`)
+- One model trained per cluster (3 separate StatsForecast instances)
+- Horizon: full test set per cluster | Lookback: 672 h (4-week window)
+- Parameters: `season_length=24`, `approximation=True`, `stepwise=True`
+- Retrained on train+val before final test evaluation
+
+**Test results — Overall:** MAPE = 18.726
+
+**Test results — By Period:**
+
+| Period   | Date Range                    | MAPE   |
+|----------|-------------------------------|--------|
+| Period 1 | 2014-05-01 → 2014-06-30       | 11.506 |
+| Period 2 | 2014-07-01 → 2014-08-30       | 17.815 |
+| Period 3 | 2014-08-31 → 2014-10-31       | 20.234 |
+| Period 4 | 2014-11-01 → 2014-12-31       | 25.485 |
+
+**Test results — By Cluster:**
+
+| Cluster ID | Cluster Name                 | MAPE   |
+|------------|------------------------------|--------|
+| -1         | outlier_irregular_profile    | 38.857 |
+| 0          | high_load_daytime_mixed_week | 14.552 |
+| 1          | low_load_daytime_mixed_week  | 21.829 |
+
+---
+
+#### AutoETS_Cluster.ipynb — AutoETS (Level 1)
+
+- Library: `statsforecast` `AutoETS`
+- Format: long-format (`master_long_hourly_*.csv`)
+- One model trained per cluster (3 separate StatsForecast instances)
+- Horizon: full test set per cluster | Lookback: 672 h (4-week window)
+- Parameters: `season_length=24`
+- Retrained on train+val before final test evaluation
+- Note: Cluster -1 (outlier) produces extremely high MAPE due to near-zero actual values causing numerical instability in ETS error calculation
+
+**Test results — Overall:** MAPE = 36.199
+
+**Test results — By Period:**
+
+| Period   | Date Range                    | MAPE   |
+|----------|-------------------------------|--------|
+| Period 1 | 2014-05-01 → 2014-06-30       | 18.210 |
+| Period 2 | 2014-07-01 → 2014-08-30       | 31.832 |
+| Period 3 | 2014-08-31 → 2014-10-31       | 39.966 |
+| Period 4 | 2014-11-01 → 2014-12-31       | 55.166 |
+
+**Test results — By Cluster:**
+
+| Cluster ID | Cluster Name                 | MAPE    |
+|------------|------------------------------|---------|
+| -1         | outlier_irregular_profile    | 467.714 |
+| 0          | high_load_daytime_mixed_week | 11.588  |
+| 1          | low_load_daytime_mixed_week  | 17.643  |
+
+### Error Distribution (Box Plots)
+
+AutoARIMA achieves an overall MAPE of 18.7% with stable error distribution across all clusters, while AutoETS scores 36.2% overall — largely driven by Cluster -1 where near-zero consumption values cause ETS to produce extreme errors (up to 5,500%).
+
+**AutoARIMA**
+
+<img src="src/modeling_step4/AutoARIMA_Boxplot_Cluster.png" width="49%"> <img src="src/modeling_step4/AutoARIMA_Boxplot_Period.png" width="49%">
+
+**AutoETS**
+
+<img src="src/modeling_step4/AutoETS_Boxplot_Cluster.png" width="49%"> <img src="src/modeling_step4/AutoETS_Boxplot_Period.png" width="49%">
+
+
+## 15) Interactive Dashboard (`dashboard/`)
 
 A Streamlit dashboard for interactively comparing model predictions against actual values. Users can select any combination of the 5 models, browse all 156 clients, and filter by date range. Displays per-client and overall metrics (MSE, MAE, WAPE) alongside an interactive Plotly line chart.
 

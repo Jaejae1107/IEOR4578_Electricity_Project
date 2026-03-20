@@ -1,0 +1,91 @@
+{
+  "main_metric": "MAPE_0_100",
+  "mape_definition": "Computed on timestamps with strictly positive actual values only.",
+  "outlier_handling": {
+    "method": "IsolationForest",
+    "contamination": 0.05,
+    "n_outliers_removed_before_clustering": 8
+  },
+  "clustering_features": [
+    "hour_profile_00",
+    "hour_profile_01",
+    "hour_profile_02",
+    "hour_profile_03",
+    "hour_profile_04",
+    "hour_profile_05",
+    "hour_profile_06",
+    "hour_profile_07",
+    "hour_profile_08",
+    "hour_profile_09",
+    "hour_profile_10",
+    "hour_profile_11",
+    "hour_profile_12",
+    "hour_profile_13",
+    "hour_profile_14",
+    "hour_profile_15",
+    "hour_profile_16",
+    "hour_profile_17",
+    "hour_profile_18",
+    "hour_profile_19",
+    "hour_profile_20",
+    "hour_profile_21",
+    "hour_profile_22",
+    "hour_profile_23",
+    "month_profile_01",
+    "month_profile_02",
+    "month_profile_03",
+    "month_profile_04",
+    "month_profile_05",
+    "month_profile_06",
+    "month_profile_07",
+    "month_profile_08",
+    "month_profile_09",
+    "month_profile_10",
+    "month_profile_11",
+    "month_profile_12",
+    "weekday_profile_0",
+    "weekday_profile_1",
+    "weekday_profile_2",
+    "weekday_profile_3",
+    "weekday_profile_4",
+    "weekday_profile_5",
+    "weekday_profile_6",
+    "weekend_ratio",
+    "day_night_ratio",
+    "peak_hour"
+  ],
+  "fixed_split": {
+    "train_start": "2012-01-01 00:00:00",
+    "train_end": "2013-12-31 23:00:00",
+    "validation_start": "2014-01-01 00:00:00",
+    "validation_end": "2014-04-30 23:00:00",
+    "test_start": "2014-05-01 00:00:00",
+    "test_end": "2014-12-31 23:00:00"
+  },
+  "equal_size_test_periods": [
+    {
+      "period_id": 1,
+      "start": "2014-05-01 00:00:00",
+      "end": "2014-06-30 23:00:00",
+      "n_hours": 1464
+    },
+    {
+      "period_id": 2,
+      "start": "2014-07-01 00:00:00",
+      "end": "2014-08-30 23:00:00",
+      "n_hours": 1464
+    },
+    {
+      "period_id": 3,
+      "start": "2014-08-31 00:00:00",
+      "end": "2014-10-31 23:00:00",
+      "n_hours": 1464
+    },
+    {
+      "period_id": 4,
+      "start": "2014-11-01 00:00:00",
+      "end": "2014-12-31 23:00:00",
+      "n_hours": 1464
+    }
+  ]
+}
