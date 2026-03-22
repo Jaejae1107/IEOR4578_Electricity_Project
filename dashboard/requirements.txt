@@ -7,3 +7,4 @@ prophet>=1.1
 neuralforecast>=1.7
 streamlit>=1.30
 plotly>=5.18
+google-generativeai>=0.5

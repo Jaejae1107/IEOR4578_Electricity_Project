@@ -9,7 +9,10 @@ Usage:
     streamlit run dashboard/dashboard.py
 """
 
+import io
+import tempfile
 import warnings
+import zipfile
 warnings.filterwarnings("ignore")
 
 import streamlit as st
@@ -18,14 +21,9 @@ import numpy as np
 import plotly.graph_objects as go
 from pathlib import Path
 
-# ── Page config ──────────────────────────────────────────────────────────────
-st.set_page_config(
-    page_title="Electricity Load Forecasting",
-    layout="wide",
-)
-
-ROOT = Path(__file__).resolve().parent.parent
-MODEL_DIR = ROOT / "model_storage"
+ROOT      = Path(__file__).resolve().parent.parent
+MODEL_DIR = ROOT / "model_weights"
+ARTIFACTS = ROOT / "artifacts/clustering"
 
 # ── Constants ────────────────────────────────────────────────────────────────
 TRAIN_END  = "2013-12-31 23:00:00"
@@ -102,58 +100,176 @@ def apply_lookback(df, hours):
     )
 
 
+# ── Cluster-model helpers ─────────────────────────────────────────────────────
+@st.cache_data(show_spinner=False)
+def _load_cluster_mapping():
+    return pd.read_csv(ARTIFACTS / "user_cluster_mapping.csv")
+
+
+@st.cache_data(show_spinner=False)
+def _compute_scale_factors():
+    """Returns {user_id: scale} = user_train_mean / cluster_train_mean."""
+    mapping   = _load_cluster_mapping()
+    df_wide   = pd.read_parquet(ROOT / "master_wide_hourly.parquet").reset_index()
+    df_wide["timestamp"] = pd.to_datetime(df_wide["timestamp"])
+    train     = df_wide[df_wide["timestamp"] <= TRAIN_END]
+    mt_cols   = [c for c in train.columns if c.startswith("MT_")]
+    user_means = train[mt_cols].mean()
+
+    scales = {}
+    for cid in [0, 1]:
+        users   = mapping[mapping["cluster_id"] == cid]["user_id"].tolist()
+        valid   = [u for u in users if u in user_means.index]
+        c_mean  = user_means[valid].mean()
+        for u in valid:
+            scales[u] = float(user_means[u] / c_mean)
+    return scales
+
+
+def _load_from_zip(zip_name, member):
+    import joblib
+    with zipfile.ZipFile(MODEL_DIR / zip_name) as z:
+        with z.open(member) as f:
+            return joblib.load(io.BytesIO(f.read()))
+
+
+_itransformer_tmpdirs: dict = {}
+
+def _get_itransformer_dir(cluster_key: str) -> str:
+    if cluster_key in _itransformer_tmpdirs:
+        return _itransformer_tmpdirs[cluster_key]
+    tmp = tempfile.mkdtemp()
+    prefix = f"itransformer_final_{cluster_key}/"
+    with zipfile.ZipFile(MODEL_DIR / "itransformer_models.zip") as z:
+        for member in z.namelist():
+            if member.startswith(prefix):
+                z.extract(member, tmp)
+    path = str(Path(tmp) / f"itransformer_final_{cluster_key}")
+    _itransformer_tmpdirs[cluster_key] = path
+    return path
+
+
 # ── Prediction functions (each cached) ──────────────────────────────────────
 @st.cache_data(show_spinner="Running AutoARIMA predictions...")
 def predict_autoarima(test_h):
-    import joblib
-    sf = joblib.load(MODEL_DIR / "autoarima_final.joblib")
-    preds = sf.predict(h=test_h)
-    if "unique_id" not in preds.columns:
-        preds = preds.reset_index()
-    return preds[["unique_id", "ds", "AutoARIMA"]]
+    mapping  = _load_cluster_mapping()
+    scales   = _compute_scale_factors()
+    outliers = mapping[mapping["cluster_id"] == -1]["user_id"].tolist()
+    all_preds = []
+
+    for cid in [0, 1]:
+        sf    = _load_from_zip("AutoARIMA_models.zip", f"models/autoarima_final_cluster_{cid}.joblib")
+        preds = sf.predict(h=test_h).reset_index()
+        for user in mapping[mapping["cluster_id"] == cid]["user_id"]:
+            udf = preds[["ds", "AutoARIMA"]].copy()
+            udf["unique_id"]  = user
+            udf["AutoARIMA"] *= scales.get(user, 1.0)
+            all_preds.append(udf[["unique_id", "ds", "AutoARIMA"]])
+
+    for user in outliers:
+        sf    = _load_from_zip("AutoARIMA_models.zip", f"models/autoarima_final_{user}.joblib")
+        preds = sf.predict(h=test_h).reset_index()
+        preds["unique_id"] = user
+        all_preds.append(preds[["unique_id", "ds", "AutoARIMA"]])
+
+    return pd.concat(all_preds, ignore_index=True)
 
 
 @st.cache_data(show_spinner="Running AutoETS predictions...")
 def predict_autoets(test_h):
-    import joblib
-    sf = joblib.load(MODEL_DIR / "autoets_final.joblib")
-    preds = sf.predict(h=test_h)
-    if "unique_id" not in preds.columns:
-        preds = preds.reset_index()
-    return preds[["unique_id", "ds", "AutoETS"]]
+    mapping  = _load_cluster_mapping()
+    scales   = _compute_scale_factors()
+    outliers = mapping[mapping["cluster_id"] == -1]["user_id"].tolist()
+    all_preds = []
+
+    for cid in [0, 1]:
+        sf    = _load_from_zip("AutoETS_models.zip", f"models/autoets_final_cluster_{cid}.joblib")
+        preds = sf.predict(h=test_h).reset_index()
+        for user in mapping[mapping["cluster_id"] == cid]["user_id"]:
+            udf = preds[["ds", "AutoETS"]].copy()
+            udf["unique_id"] = user
+            udf["AutoETS"]  *= scales.get(user, 1.0)
+            all_preds.append(udf[["unique_id", "ds", "AutoETS"]])
+
+    for user in outliers:
+        sf    = _load_from_zip("AutoETS_models.zip", f"models/autoets_final_{user}.joblib")
+        preds = sf.predict(h=test_h).reset_index()
+        preds["unique_id"] = user
+        all_preds.append(preds[["unique_id", "ds", "AutoETS"]])
+
+    return pd.concat(all_preds, ignore_index=True)
 
 
 @st.cache_data(show_spinner="Running SARIMAX predictions...")
 def predict_sarimax(test_h, _test_exog):
-    import joblib
-    sf = joblib.load(MODEL_DIR / "sarimax_final.joblib")
-    X_test = _test_exog[["unique_id", "ds"] + EXOG_COLS_ALL]
-    preds = sf.predict(h=test_h, X_df=X_test)
-    if "unique_id" not in preds.columns:
-        preds = preds.reset_index()
-    # SARIMAX uses AutoARIMA under the hood — rename the output column
-    preds = preds.rename(columns={"AutoARIMA": "SARIMAX"})
-    return preds[["unique_id", "ds", "SARIMAX"]]
+    mapping  = _load_cluster_mapping()
+    scales   = _compute_scale_factors()
+    outliers = mapping[mapping["cluster_id"] == -1]["user_id"].tolist()
+    ts_df = (
+        _test_exog[["ds"] + EXOG_COLS_ALL]
+        .drop_duplicates("ds")
+        .sort_values("ds")
+        .reset_index(drop=True)
+    )
+    all_preds = []
+
+    for cid in [0, 1]:
+        cluster_uid = f"cluster_{cid}"
+        sf  = _load_from_zip("SARIMAX_models.zip", f"models/sarimax_final_{cluster_uid}.joblib")
+        X   = ts_df.copy()
+        X["unique_id"] = cluster_uid
+        p   = sf.predict(h=test_h, X_df=X[["unique_id", "ds"] + EXOG_COLS_ALL]).reset_index(drop=True)
+        col = [c for c in p.columns if c not in ("unique_id", "ds")][0]
+        for user in mapping[mapping["cluster_id"] == cid]["user_id"]:
+            scaled_vals = p[col].values * scales.get(user, 1.0)
+            udf = pd.DataFrame({"unique_id": user, "ds": p["ds"].values, "SARIMAX": scaled_vals})
+            all_preds.append(udf)
+
+    for user in outliers:
+        sf  = _load_from_zip("SARIMAX_models.zip", f"models/sarimax_final_{user}.joblib")
+        X   = ts_df.copy()
+        X["unique_id"] = user
+        p   = sf.predict(h=test_h, X_df=X[["unique_id", "ds"] + EXOG_COLS_ALL]).reset_index(drop=True)
+        col = [c for c in p.columns if c not in ("unique_id", "ds")][0]
+        p["unique_id"] = user
+        all_preds.append(p[["unique_id", "ds", col]].rename(columns={col: "SARIMAX"}))
+
+    return pd.concat(all_preds, ignore_index=True)
 
 
-@st.cache_data(show_spinner="Running Prophet predictions (156 models)...")
+@st.cache_data(show_spinner="Running Prophet predictions...")
 def predict_prophet(_test_df):
-    import joblib
-    prophet_models = joblib.load(MODEL_DIR / "prophet_final.joblib")
-    preds_list = []
-    for uid, grp in _test_df.groupby("unique_id"):
-        if uid not in prophet_models:
-            continue
-        m = prophet_models[uid]
-        future = grp[["ds", "is_weekend"]].copy()
-        forecast = m.predict(future)
-        pred_df = pd.DataFrame({
-            "unique_id": uid,
-            "ds": forecast["ds"].values,
-            "Prophet": forecast["yhat"].values,
-        })
-        preds_list.append(pred_df)
-    return pd.concat(preds_list, ignore_index=True)
+    mapping  = _load_cluster_mapping()
+    scales   = _compute_scale_factors()
+    outliers = mapping[mapping["cluster_id"] == -1]["user_id"].tolist()
+    future_base = (
+        _test_df[["ds", "is_weekend"]]
+        .drop_duplicates("ds")
+        .sort_values("ds")
+        .reset_index(drop=True)
+    )
+    all_preds = []
+
+    for cid in [0, 1]:
+        m        = _load_from_zip("Prophet_models.zip", f"models/prophet_final_cluster_{cid}.joblib")
+        forecast = m.predict(future_base)
+        for user in mapping[mapping["cluster_id"] == cid]["user_id"]:
+            all_preds.append(pd.DataFrame({
+                "unique_id": user,
+                "ds":        forecast["ds"].values,
+                "Prophet":   forecast["yhat"].values * scales.get(user, 1.0),
+            }))
+
+    for user in outliers:
+        m        = _load_from_zip("Prophet_models.zip", f"models/prophet_final_{user}.joblib")
+        forecast = m.predict(future_base)
+        all_preds.append(pd.DataFrame({
+            "unique_id": user,
+            "ds":        forecast["ds"].values,
+            "Prophet":   forecast["yhat"].values,
+        }))
+
+    return pd.concat(all_preds, ignore_index=True)
 
 
 def _add_calendar_features(df):
@@ -172,33 +288,41 @@ def _add_calendar_features(df):
 def predict_itransformer(_train_val_with_exog, _test_dates):
     from neuralforecast import NeuralForecast
 
-    nf = NeuralForecast.load(str(MODEL_DIR / "itransformer_val"))
-
-    remaining = set(_test_dates)
-    history = _train_val_with_exog.copy()
+    mapping   = _load_cluster_mapping()
+    test_set  = set(pd.to_datetime(_test_dates))
     all_preds = []
 
-    while remaining:
-        preds = nf.predict(df=history).reset_index()
-        preds["ds"] = pd.to_datetime(preds["ds"])
-
-        # Collect predictions that match remaining test dates
-        matched = preds[preds["ds"].isin(remaining)]
-        if len(matched) == 0:
-            break  # safety: no progress possible
-        all_preds.append(matched)
-        remaining -= set(matched["ds"].unique())
-
-        # Append ALL predictions to history to keep it contiguous
-        pred_rows = preds[["unique_id", "ds", "iTransformer"]].rename(
-            columns={"iTransformer": "y"},
-        )
-        pred_rows = _add_calendar_features(pred_rows.copy())
+    cluster_groups = [(0, "cluster_0"), (1, "cluster_1"), (-1, "outliers")]
+    for cid, cluster_key in cluster_groups:
+        nf      = NeuralForecast.load(_get_itransformer_dir(cluster_key))
+        users   = mapping[mapping["cluster_id"] == cid]["user_id"].tolist()
         history = (
-            pd.concat([history, pred_rows], ignore_index=True)
-            .sort_values(["unique_id", "ds"])
-            .reset_index(drop=True)
+            _train_val_with_exog[_train_val_with_exog["unique_id"].isin(users)]
+            .copy()
         )
+        remaining = set(test_set)
+        cluster_preds = []
+
+        while remaining:
+            preds = nf.predict(df=history).reset_index()
+            preds["ds"] = pd.to_datetime(preds["ds"])
+            matched = preds[preds["ds"].isin(remaining)]
+            if len(matched) == 0:
+                break
+            cluster_preds.append(matched)
+            remaining -= set(matched["ds"].unique())
+            pred_rows = preds[["unique_id", "ds", "iTransformer"]].rename(
+                columns={"iTransformer": "y"}
+            )
+            pred_rows = _add_calendar_features(pred_rows.copy())
+            history = (
+                pd.concat([history, pred_rows], ignore_index=True)
+                .sort_values(["unique_id", "ds"])
+                .reset_index(drop=True)
+            )
+
+        if cluster_preds:
+            all_preds.append(pd.concat(cluster_preds, ignore_index=True))
 
     result = pd.concat(all_preds, ignore_index=True)
     return result[["unique_id", "ds", "iTransformer"]]
@@ -239,6 +363,7 @@ def compute_metrics(y_true, y_pred):
 
 # ── Main app ─────────────────────────────────────────────────────────────────
 def main():
+    st.set_page_config(page_title="Electricity Load Forecasting", layout="wide")
     st.title("Electricity Load Forecasting Dashboard")
 
     # Load data

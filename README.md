@@ -538,12 +538,18 @@ iTransformer achieves the lowest mean MAPE across the first three test periods (
 
 ## 18) Interactive Dashboard (`dashboard/`)
 
-A Streamlit dashboard for interactively comparing model predictions against actual values. Users can select any combination of the 5 models, browse all 156 clients, and filter by date range. Displays per-client and overall metrics (MSE, MAE, WAPE) alongside an interactive Plotly line chart.
+A two-page Streamlit application combining an AI forecasting agent with an interactive model comparison dashboard.
+
+**Page 1 — AI Forecasting Agent:** Natural-language chat interface powered by Google Gemini 2.5 Flash. Users describe a consumer and horizon in plain text (e.g. "forecast MT_001 for the next 48 hours"); the agent looks up the consumer's cluster, selects the best model by MAPE, runs the forecast, and renders a Plotly chart with mean/peak metrics inline.
+
+**Page 2 — Model Comparison:** Interactively compare all 5 model predictions against actual values for any of the 156 clients across any date range in the test period (May–December 2014). Displays per-client and overall MSE, MAE, WAPE alongside an interactive Plotly line chart.
+
+Both pages use cluster-based forecasting (Steps 4–6): cluster_0 and cluster_1 models are scaled back to individual users via per-user scale factors; the 8 outlier users each have their own individually trained model.
 
 ```bash
 source .venv/bin/activate
-streamlit run dashboard/dashboard.py
+streamlit run dashboard/app.py
 ```
 
-See [dashboard/README.md](dashboard/README.md) for setup and usage details.
+See [dashboard/README.md](dashboard/README.md) for full setup, usage, and architecture details.
 
