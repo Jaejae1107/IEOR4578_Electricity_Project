@@ -538,6 +538,21 @@ iTransformer achieves the lowest mean MAPE across the first three test periods (
 
 ## 18) Interactive Dashboard (`dashboard/`)
 
+### Model Weights
+
+The dashboard requires pre-trained model weights that are **not tracked by git**. Before running the app, create a `model_weights/` directory in the project root and place the following zip files inside:
+
+```
+model_weights/
+├── AutoARIMA_models.zip      # from src/modeling_step4/
+├── AutoETS_models.zip        # from src/modeling_step4/
+├── SARIMAX_models.zip        # from src/modeling_step5/
+├── Prophet_models.zip        # from src/modeling_step5/
+└── itransformer_models.zip   # from src/modeling_step6/
+```
+
+These zips are produced by the training notebooks in `src/modeling_step4/` through `src/modeling_step6/`.
+
 A two-page Streamlit application combining an AI forecasting agent with an interactive model comparison dashboard.
 
 **Page 1 — AI Forecasting Agent:** Natural-language chat interface powered by Google Gemini 2.5 Flash. Users describe a consumer and horizon in plain text (e.g. "forecast MT_001 for the next 48 hours"); the agent looks up the consumer's cluster, selects the best model by MAPE, runs the forecast, and renders a Plotly chart with mean/peak metrics inline.

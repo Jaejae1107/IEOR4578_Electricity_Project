@@ -5,6 +5,24 @@ A two-page Streamlit application for electricity load forecasting with 156 meter
 - **Page 1 — AI Forecasting Agent** (`app.py`): Natural-language chat interface powered by Google Gemini. Ask for a forecast by consumer ID and the agent automatically selects the best cluster model, runs the forecast, and renders an interactive chart.
 - **Page 2 — Model Comparison** (`pages/1_Model_Comparison.py`): Interactive dashboard to compare all 5 model predictions against actual values for any client and date range.
 
+## Model Weights
+
+The dashboard loads pre-trained model weights from a `model_weights/` directory in the **project root**. This directory is not tracked by git and must be populated manually before running the app.
+
+Create the directory and place the following zip files inside it:
+
+```
+<project_root>/
+└── model_weights/
+    ├── AutoARIMA_models.zip
+    ├── AutoETS_models.zip
+    ├── SARIMAX_models.zip
+    ├── Prophet_models.zip
+    └── itransformer_models.zip
+```
+
+Each zip contains joblib model files for cluster_0, cluster_1, and individual outlier users. These are produced by the training notebooks in `src/modeling_step4/` through `src/modeling_step6/`.
+
 ## Setup
 
 ```bash
