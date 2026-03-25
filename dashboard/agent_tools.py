@@ -26,6 +26,7 @@ DATA_FILE = ROOT / "master_wide_hourly.parquet"
 
 FORECAST_START = pd.Timestamp("2014-05-01 00:00:00")
 LOOKBACK_HOURS = 672
+CHUNK_H = 720  # iTransformer fixed prediction horizon (matches training config)
 
 EXOG_COLS = [
     "hour_sin", "hour_cos",
@@ -34,7 +35,7 @@ EXOG_COLS = [
     "month_sin", "month_cos",
 ]
 
-# MAPE lookup: cluster_key -> {model_name: mape_pct}
+# Fallback MAPE table (cluster-level overall) used when per_user_period_mape.parquet is absent
 _MAPE_TABLE = {
     "cluster_0": {
         "AutoARIMA":    14.97,
@@ -59,6 +60,29 @@ _MAPE_TABLE = {
     },
 }
 
+# Seasonal proxy: map any calendar month to one of the 4 test period IDs
+_MONTH_TO_PERIOD = {
+    1: 4,   # Jan  → winter
+    2: 4,   # Feb  → winter
+    3: 1,   # Mar  → spring
+    4: 1,   # Apr  → spring
+    5: 1,   # May  → spring/early summer
+    6: 1,   # Jun  → spring/early summer
+    7: 2,   # Jul  → peak summer
+    8: 2,   # Aug  → peak summer
+    9: 3,   # Sep  → fall
+    10: 3,  # Oct  → fall
+    11: 4,  # Nov  → winter
+    12: 4,  # Dec  → winter
+}
+
+_PERIOD_LABELS = {
+    1: "spring / early summer",
+    2: "peak summer",
+    3: "fall",
+    4: "winter",
+}
+
 # Outlier consumer IDs
 _OUTLIER_IDS = {
     "MT_124", "MT_132", "MT_156", "MT_158",
@@ -80,6 +104,32 @@ def get_last_forecast(consumer_id: str) -> dict | None:
 # ---------------------------------------------------------------------------
 # Helper functions
 # ---------------------------------------------------------------------------
+
+@lru_cache(maxsize=1)
+def _load_per_user_period_mape() -> pd.DataFrame | None:
+    """Load per_user_period_mape.parquet; return None if not yet generated."""
+    path = ARTIFACTS / "per_user_period_mape.parquet"
+    if not path.exists():
+        return None
+    return pd.read_parquet(path)
+
+
+@lru_cache(maxsize=1)
+def _load_cluster_period_mape() -> dict | None:
+    """
+    Load precomputed cluster-period MAPE from cluster_period_mape.parquet.
+    Returns a dict keyed by (cluster_key, model, period_id) -> mean cluster MAPE,
+    or None if the file is not yet generated.
+    """
+    path = ARTIFACTS / "cluster_period_mape.parquet"
+    if not path.exists():
+        return None
+    df = pd.read_parquet(path)
+    return {
+        (row["cluster_key"], row["model"], int(row["period_id"])): round(float(row["cluster_MAPE"]), 2)
+        for _, row in df.iterrows()
+    }
+
 
 @lru_cache(maxsize=1)
 def _load_cluster_mapping() -> pd.DataFrame:
@@ -194,6 +244,48 @@ def _get_itransformer_dir(cluster_key: str) -> str:
     return model_path
 
 
+def _lookup_model_mape(consumer_id: str, cluster_key: str, model_name: str) -> dict:
+    """
+    Return both cluster-level and per-user MAPE for a model in the current season.
+
+    Cluster MAPE = precomputed mean MAPE across all users in the cluster for that period/model.
+    User MAPE    = MAPE for this specific consumer in that period/model.
+
+    Falls back to the cluster-level overall table if the parquet is absent.
+    Returns dict with: cluster_mape, user_mape, period_label, source.
+    """
+    month        = pd.Timestamp("today").month
+    period_id    = _MONTH_TO_PERIOD[month]
+    period_label = _PERIOD_LABELS[period_id]
+
+    cluster_table = _load_cluster_period_mape()
+    if cluster_table is not None:
+        cluster_mape = cluster_table.get((cluster_key, model_name, period_id))
+
+        mape_df  = _load_per_user_period_mape()
+        user_row = mape_df[
+            (mape_df["user_id"] == consumer_id) &
+            (mape_df["period_id"] == period_id) &
+            (mape_df["model"] == model_name)
+        ]
+        user_mape = round(float(user_row.iloc[0]["MAPE"]), 2) if not user_row.empty else None
+
+        return {
+            "cluster_mape": cluster_mape,
+            "user_mape":    user_mape,
+            "period_label": period_label,
+            "source":       "per_user_evaluation",
+        }
+
+    # Fallback: cluster-level overall table (no per-user breakdown)
+    return {
+        "cluster_mape": _MAPE_TABLE.get(cluster_key, {}).get(model_name),
+        "user_mape":    None,
+        "period_label": period_label,
+        "source":       "cluster_fallback",
+    }
+
+
 def _get_model_key(cluster_id: int, consumer_id: str) -> str:
     """
     Return the model key string:
@@ -279,6 +371,72 @@ def get_available_models(cluster_id: int) -> dict:
     }
 
 
+def get_best_model(consumer_id: str, forecast_start_date: str) -> dict:
+    """
+    Return the best forecasting model for a specific consumer in a given season,
+    based on per-user, per-period MAPE evaluation on the test set.
+
+    Maps forecast_start_date to one of 4 seasonal periods (spring, summer, fall,
+    winter) and looks up which model had the lowest MAPE for this consumer in
+    that period. Also returns all model scores so the agent can explain the choice.
+
+    Args:
+        consumer_id:         Meter ID string, e.g. 'MT_001'.
+        forecast_start_date: ISO date string for the forecast start, e.g. '2026-03-24'.
+                             Used to determine which seasonal period applies.
+
+    Returns:
+        dict with keys: consumer_id, period_id, period_label, best_model,
+        best_mape, all_model_mapes (dict of model->mape), source.
+        source is 'per_user_evaluation' when the parquet is available,
+        or 'cluster_fallback' when falling back to cluster-level MAPEs.
+    """
+    # Determine period from date
+    try:
+        month = pd.Timestamp(forecast_start_date).month
+    except Exception:
+        month = pd.Timestamp("today").month
+    period_id    = _MONTH_TO_PERIOD[month]
+    period_label = _PERIOD_LABELS[period_id]
+
+    # Try per-user parquet first
+    mape_df = _load_per_user_period_mape()
+    if mape_df is not None:
+        user_period = mape_df[
+            (mape_df["user_id"] == consumer_id) & (mape_df["period_id"] == period_id)
+        ]
+        if not user_period.empty:
+            scores = user_period.set_index("model")["MAPE"].round(2).to_dict()
+            best_model = min(scores, key=scores.__getitem__)
+            return {
+                "consumer_id":     consumer_id,
+                "period_id":       period_id,
+                "period_label":    period_label,
+                "best_model":      best_model,
+                "best_mape":       scores[best_model],
+                "all_model_mapes": scores,
+                "source":          "per_user_evaluation",
+            }
+
+    # Fallback: cluster-level MAPE table
+    cluster_info = lookup_consumer_cluster(consumer_id)
+    if "error" in cluster_info:
+        return cluster_info
+    cid = cluster_info["cluster_id"]
+    cluster_key = "outliers" if cid == -1 else f"cluster_{cid}"
+    scores = _MAPE_TABLE[cluster_key]
+    best_model = min(scores, key=scores.__getitem__)
+    return {
+        "consumer_id":     consumer_id,
+        "period_id":       period_id,
+        "period_label":    period_label,
+        "best_model":      best_model,
+        "best_mape":       scores[best_model],
+        "all_model_mapes": scores,
+        "source":          "cluster_fallback",
+    }
+
+
 def run_forecast(
     consumer_id: str,
     model_name: str,
@@ -295,7 +453,8 @@ def run_forecast(
         consumer_id:   Meter ID string, e.g. 'MT_001'.
         model_name:    One of 'AutoARIMA', 'AutoETS', 'SARIMAX', 'Prophet',
                        'iTransformer'.
-        horizon_hours: Number of hours to forecast (max 168). Default 24.
+        horizon_hours: Number of hours to forecast (max 8760). Default 24.
+                       Note: accuracy degrades for very long horizons.
 
     Returns:
         Summary dict with keys: consumer_id, cluster, model, horizon_hours,
@@ -304,7 +463,7 @@ def run_forecast(
         Returns {"error": "..."} on failure.
     """
     # Clamp horizon
-    horizon_hours = min(max(1, horizon_hours), 168)
+    horizon_hours = min(max(1, horizon_hours), 8760)
 
     # --- Step 1: resolve cluster ---
     cluster_info = lookup_consumer_cluster(consumer_id)
@@ -402,9 +561,10 @@ def run_forecast(
             model_dir = _get_itransformer_dir(cluster_key)
             nf = NeuralForecast.load(path=model_dir)
 
-            # Build history: last LOOKBACK_HOURS rows for all cluster users
+            # Build history: all train+val data ending just before FORECAST_START
+            # (matches evaluation notebooks which use train_val ending 2014-04-30)
             df_wide = pd.read_parquet(DATA_FILE)
-            history_wide = df_wide.iloc[-LOOKBACK_HOURS:]
+            history_wide = df_wide[df_wide.index < FORECAST_START]
 
             # Identify which users belong to this cluster
             mapping = _load_cluster_mapping()
@@ -432,16 +592,30 @@ def run_forecast(
             )
             history_long = _add_calendar_features(history_long)
 
-            pred_df = nf.predict(df=history_long)
-            # pred_df has index=unique_id or column; normalise
-            if "unique_id" not in pred_df.columns:
-                pred_df = pred_df.reset_index()
+            # Rolling prediction for horizons longer than one chunk
+            n_chunks = math.ceil(horizon_hours / CHUNK_H)
+            collected = []
+            history_roll = history_long.copy()
+            for _ in range(n_chunks):
+                pred_df = nf.predict(df=history_roll)
+                if "unique_id" not in pred_df.columns:
+                    pred_df = pred_df.reset_index()
+                chunk = pred_df[pred_df["unique_id"] == consumer_id].copy()
+                if chunk.empty:
+                    break
+                collected.append(chunk)
+                # Append predictions as new history for next chunk
+                new_hist = pred_df[["unique_id", "ds", "iTransformer"]].rename(
+                    columns={"iTransformer": "y"}
+                )
+                new_hist = _add_calendar_features(new_hist)
+                history_roll = pd.concat([history_roll, new_hist], ignore_index=True) \
+                                 .sort_values(["unique_id", "ds"]).reset_index(drop=True)
 
-            user_pred = pred_df[pred_df["unique_id"] == consumer_id].copy()
-            if user_pred.empty:
+            if not collected:
                 return {"error": f"iTransformer produced no output for {consumer_id}."}
 
-            user_pred = user_pred.sort_values("ds").iloc[:horizon_hours]
+            user_pred = pd.concat(collected).sort_values("ds").iloc[:horizon_hours]
             raw_values = user_pred["iTransformer"].values.astype(float)
             timestamps = user_pred["ds"].tolist()
 
@@ -461,6 +635,9 @@ def run_forecast(
         for t in timestamps
     ]
 
+    # Look up MAPE for this consumer/cluster/model
+    mape_info = _lookup_model_mape(consumer_id, cluster_key, model_name)
+
     # Store full forecast
     _forecast_store[consumer_id] = {
         "consumer_id":    consumer_id,
@@ -470,6 +647,10 @@ def run_forecast(
         "values":         raw_values.tolist(),
         "forecast_start": ts_str[0] if ts_str else str(FORECAST_START),
         "forecast_end":   ts_str[-1] if ts_str else "",
+        "cluster_mape":   mape_info["cluster_mape"],
+        "user_mape":      mape_info["user_mape"],
+        "period_label":   mape_info["period_label"],
+        "mape_source":    mape_info["source"],
     }
 
     mean_kwh = float(np.mean(raw_values))
