@@ -353,12 +353,12 @@ def compute_metrics(y_true, y_pred):
     mask = ~(np.isnan(y_true) | np.isnan(y_pred))
     y, yhat = y_true[mask], y_pred[mask]
     if len(y) == 0:
-        return {"MSE": np.nan, "MAE": np.nan, "WAPE": np.nan}
-    mse = float(np.mean((y - yhat) ** 2))
-    mae = float(np.mean(np.abs(y - yhat)))
+        return {"MAPE": np.nan, "WAPE": np.nan}
+    nonzero = y != 0
+    mape = float(np.mean(np.abs((y[nonzero] - yhat[nonzero]) / y[nonzero])) * 100) if nonzero.any() else np.nan
     denom = float(np.sum(np.abs(y)))
     wape = float(np.sum(np.abs(y - yhat)) / denom) if denom > 0 else np.nan
-    return {"MSE": mse, "MAE": mae, "WAPE": wape}
+    return {"MAPE": mape, "WAPE": wape}
 
 
 # ── Main app ─────────────────────────────────────────────────────────────────
@@ -428,7 +428,7 @@ def main():
     ].sort_values("ds")
 
     # ── Per-client metrics ───────────────────────────────────────────────
-    st.subheader(f"Performance Metrics — {selected_client}")
+    st.subheader(f"Performance Metrics — {selected_client} ({start_date} to {end_date})")
 
     metric_cols = st.columns(len(selected_models))
     client_metrics_rows = []
@@ -437,22 +437,15 @@ def main():
             m = compute_metrics(client_df["y"].values, client_df[model_name].values)
             client_metrics_rows.append({"Model": model_name, **m})
             with metric_cols[i]:
-                st.metric(label=f"{model_name} — WAPE", value=f"{m['WAPE']:.4f}")
-                st.caption(f"MSE: {m['MSE']:,.2f}  |  MAE: {m['MAE']:,.2f}")
+                st.metric(label=f"{model_name} — MAPE", value=f"{m['MAPE']:.2f}%")
+                st.caption(f"WAPE: {m['WAPE']:.4f}")
 
-    # ── Overall metrics ──────────────────────────────────────────────────
-    st.subheader("Overall Metrics (All Clients)")
-
-    overall_rows = []
-    for model_name in selected_models:
-        if model_name in merged.columns:
-            m = compute_metrics(merged["y"].values, merged[model_name].values)
-            overall_rows.append({"Model": model_name, **m})
-
-    if overall_rows:
-        overall_df = pd.DataFrame(overall_rows)
+    # ── Metrics comparison table (per-client) ────────────────────────────
+    if client_metrics_rows:
+        st.subheader(f"Metrics Comparison — {selected_client} ({start_date} to {end_date})")
+        metrics_df = pd.DataFrame(client_metrics_rows)
         st.dataframe(
-            overall_df.style.format({"MSE": "{:,.2f}", "MAE": "{:,.2f}", "WAPE": "{:.4f}"}),
+            metrics_df.style.format({"MAPE": "{:.2f}%", "WAPE": "{:.4f}"}),
             use_container_width=True,
             hide_index=True,
         )
@@ -491,16 +484,6 @@ def main():
         margin=dict(l=60, r=20, t=40, b=40),
     )
     st.plotly_chart(fig, use_container_width=True)
-
-    # ── Metrics comparison table (per-client) ────────────────────────────
-    if client_metrics_rows:
-        st.subheader(f"Metrics Comparison — {selected_client}")
-        metrics_df = pd.DataFrame(client_metrics_rows)
-        st.dataframe(
-            metrics_df.style.format({"MSE": "{:,.2f}", "MAE": "{:,.2f}", "WAPE": "{:.4f}"}),
-            use_container_width=True,
-            hide_index=True,
-        )
 
 
 if __name__ == "__main__":

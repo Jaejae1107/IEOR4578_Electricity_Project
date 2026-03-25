@@ -62,8 +62,8 @@ The agent will:
 - **Model selection:** Choose any combination of AutoARIMA, AutoETS, SARIMAX, Prophet, iTransformer
 - **Client selection:** Browse all 156 active clients (MT_001 through MT_370)
 - **Date range filter:** Narrow the test period (May–December 2014)
-- **Per-client metrics:** MSE, MAE, WAPE for the selected client
-- **Overall metrics:** MSE, MAE, WAPE aggregated across all 156 clients
+- **Per-client metric cards:** MAPE (primary) and WAPE for each selected model, computed over the selected date range
+- **Metrics Comparison table:** Side-by-side MAPE and WAPE for all selected models, shown above the chart
 - **Interactive line chart:** Actual vs predicted values (Plotly, hover-enabled)
 
 ## How It Works
