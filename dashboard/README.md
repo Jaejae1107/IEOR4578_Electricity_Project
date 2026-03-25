@@ -49,14 +49,13 @@ Enter your Gemini API key in the sidebar, then type a natural-language request s
 
 The agent will:
 1. Look up which cluster the consumer belongs to
-2. Select the best available model for that cluster (lowest MAPE), unless you specify one
-3. Run the forecast and return a summary with mean/peak load
-4. Render a Plotly line chart and full data table inline
+2. Select the best model for that specific consumer in the current season, based on per-user per-period MAPE evaluation on the test set (stored in `artifacts/clustering/per_user_period_mape.parquet`). The calendar month is mapped to one of 4 periods: spring (Mar–Jun), peak summer (Jul–Aug), fall (Sep–Oct), winter (Nov–Feb).
+3. Run the forecast and return a summary with mean/peak load, explaining why the model was chosen and what the MAPE means in plain language
+4. Render a Plotly line chart and full data table inline, with metric cards showing mean load, peak load, cluster MAPE, and the client's individual MAPE
 
 **Sidebar options:**
 - **Gemini API Key:** Required. Can also be set via the `GEMINI_API_KEY` environment variable.
-- **Model preference:** Override the auto-selected model (AutoARIMA, AutoETS, SARIMAX, Prophet, iTransformer).
-- **Forecast Horizon:** Optionally fix the horizon (24 / 48 / 72 / 120 / 168 hours). Defaults to "Auto (from message)" so users can specify the horizon in plain text.
+- **Forecast Horizon:** Optionally fix the horizon (24 / 48 / 72 / 120 / 168 hours). Defaults to "Auto (from message)" so users can specify the horizon in plain text (e.g. "next 100 days").
 
 ## Page 2 — Model Comparison
 
@@ -84,7 +83,7 @@ Users are grouped into two main clusters plus 8 outliers (from `artifacts/cluste
 | AutoETS | statsforecast | `sf.predict(h=5856)` — cluster + outlier models, scale factor applied to cluster users |
 | SARIMAX | statsforecast | `sf.predict(h=5856, X_df=...)` with 7 calendar exogenous features; scale factor applied to cluster users |
 | Prophet | prophet | `m.predict(future)` with `is_weekend` regressor; cluster + outlier models, scale factor applied to cluster users |
-| iTransformer | neuralforecast | Rolling 720-hour chunks; 3 separate NeuralForecast instances (cluster_0, cluster_1, outliers) |
+| iTransformer | neuralforecast | Rolling 720-hour chunks starting from 2014-05-01; history seeded with full train+val data (ending 2014-04-30); 3 separate NeuralForecast instances (cluster_0, cluster_1, outliers) |
 
 ### Overall MAPE scores (test set)
 

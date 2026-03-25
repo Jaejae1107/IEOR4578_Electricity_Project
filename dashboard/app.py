@@ -7,10 +7,14 @@ import os
 import sys
 from pathlib import Path
 
+import datetime
+
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+
+_TODAY = datetime.date.today().strftime("%Y-%m-%d")
 
 # ---------------------------------------------------------------------------
 # Path setup — must happen before importing agent_tools
@@ -25,7 +29,7 @@ from google import genai
 from google.genai import types as genai_types
 
 from agent_tools import (
-    get_available_models,
+    get_best_model,
     get_last_forecast,
     lookup_consumer_cluster,
     run_forecast,
@@ -43,18 +47,37 @@ st.set_page_config(
 # ---------------------------------------------------------------------------
 # System prompt
 # ---------------------------------------------------------------------------
-SYSTEM_PROMPT = """
+SYSTEM_PROMPT = f"""
 You are an electricity load forecasting assistant for a business manager.
 Consumers are identified by meter IDs like MT_001 through MT_370.
+Today's date is {_TODAY}.
 
 When asked for a forecast:
-1. Call lookup_consumer_cluster with the consumer ID
-2. Call get_available_models with the cluster_id from step 1
-3. Unless the user specifies a model, use the best_model (lowest MAPE)
-4. Call run_forecast with consumer_id, model_name, and horizon_hours (default 24)
-5. Summarize: cluster name, model chosen + MAPE, forecast period, mean/peak values
+1. Call lookup_consumer_cluster with the consumer ID.
+2. Call get_best_model with the consumer_id and the forecast start date
+   (infer from the user's message; if not mentioned, use today's date: {_TODAY}).
+   Always pass forecast_start_date as a plain YYYY-MM-DD string, e.g. '{_TODAY}'.
+3. Unless the user specifies a model, use the best_model returned.
+4. Call run_forecast with consumer_id, model_name, and horizon_hours (default 24, max 8760).
+   Convert user requests in days to hours (e.g. "100 days" → 2400 hours).
+5. Summarise the result in a concise, business-friendly way:
+   - Which cluster the consumer belongs to
+   - Which model was chosen and why (mention its MAPE vs. the next-best alternative)
+   - The seasonal period used for model selection
+   - Mean and peak forecast values
 
-Be concise and business-friendly. If the user asks about a consumer not found, say so clearly.
+When explaining model selection, be specific. For example:
+  "AutoETS was selected because it achieved the lowest MAPE of 11.2% for MT_050
+   in the spring/early summer period, compared to AutoARIMA at 12.3% and SARIMAX at 15.1%."
+
+Always explain MAPE in plain language for general users. For example:
+  "A MAPE of 11.2% means the forecast is typically off by about 11.2% from the actual electricity usage —
+   so if actual usage is 100 kWh, the forecast would typically be within about 11 kWh of that."
+Also interpret the result: whether the accuracy is good, acceptable, or poor for electricity forecasting
+(below 10% is excellent, 10–20% is good, above 20% warrants caution).
+
+If the user specifies a model explicitly, skip steps 2-3 and use that model directly.
+If the consumer ID is not found, say so clearly.
 """.strip()
 
 
@@ -67,12 +90,6 @@ api_key = st.sidebar.text_input(
     "Gemini API Key",
     type="password",
     value=os.environ.get("GEMINI_API_KEY", ""),
-)
-
-st.sidebar.selectbox(
-    "Model preference",
-    options=["Best MAPE (auto)", "AutoARIMA", "AutoETS", "SARIMAX", "Prophet", "iTransformer"],
-    key="model_preference",
 )
 
 st.sidebar.selectbox(
@@ -106,7 +123,7 @@ def _get_chat_config():
     if _CHAT_CONFIG is None:
         _CHAT_CONFIG = genai_types.GenerateContentConfig(
             system_instruction=SYSTEM_PROMPT,
-            tools=[lookup_consumer_cluster, get_available_models, run_forecast],
+            tools=[lookup_consumer_cluster, get_best_model, run_forecast],
             automatic_function_calling=genai_types.AutomaticFunctionCallingConfig(
                 disable=True,
             ),
@@ -121,8 +138,8 @@ def dispatch_tool(name: str, args: dict) -> dict:
     """Dispatch a Gemini function-call to the corresponding agent_tools function."""
     if name == "lookup_consumer_cluster":
         return lookup_consumer_cluster(**args)
-    elif name == "get_available_models":
-        return get_available_models(**args)
+    elif name == "get_best_model":
+        return get_best_model(**args)
     elif name == "run_forecast":
         return run_forecast(**args)
     else:
@@ -148,9 +165,14 @@ def run_agent_turn(user_prompt: str, api_key: str) -> tuple[str, dict | None]:
     last_consumer_id = None
 
     while True:
+        candidate = response.candidates[0]
+        content   = candidate.content if candidate else None
+        if not content or not content.parts:
+            break
+
         fn_calls = [
             part.function_call
-            for part in response.candidates[0].content.parts
+            for part in content.parts
             if part.function_call
         ]
 
@@ -194,14 +216,23 @@ def render_forecast(forecast_data: dict) -> None:
         st.warning("No forecast data to display.")
         return
 
-    mean_val = float(np.mean(values))
-    peak_val = float(np.max(values))
+    mean_val     = float(np.mean(values))
+    peak_val     = float(np.max(values))
+    cluster_mape = forecast_data.get("cluster_mape")
+    user_mape    = forecast_data.get("user_mape")
+    period_label = forecast_data.get("period_label", "")
 
-    col1, col2 = st.columns(2)
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("Mean Load", f"{mean_val:.2f} kWh")
     with col2:
         st.metric("Peak Load", f"{peak_val:.2f} kWh")
+    with col3:
+        label = f"Cluster MAPE ({period_label})" if period_label else "Cluster MAPE"
+        st.metric(label, f"{cluster_mape:.1f}%" if cluster_mape is not None else "N/A")
+    with col4:
+        label = f"Client's MAPE ({period_label})" if period_label else "Client's MAPE"
+        st.metric(label, f"{user_mape:.1f}%" if user_mape is not None else "N/A")
 
     # Plotly line chart
     fig = go.Figure()
@@ -251,13 +282,9 @@ for msg in st.session_state.messages:
 
 # Chat input
 if prompt := st.chat_input("Enter a consumer ID or question..."):
-    # Inject model preference if user hasn't specified "Best MAPE (auto)"
-    model_pref = st.session_state.get("model_preference", "Best MAPE (auto)")
     horizon = st.session_state.get("horizon_hours", "Auto (from message)")
 
     effective_prompt = prompt
-    if model_pref != "Best MAPE (auto)":
-        effective_prompt += f" Use the {model_pref} model."
     if horizon != "Auto (from message)":
         effective_prompt += f" Use a forecast horizon of {horizon} hours."
 
